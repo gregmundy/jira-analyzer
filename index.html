@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Metrics Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .sort-indicator {
+            display: inline-block;
+            width: 0;
+            height: 0;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
+        
+        .sort-asc .sort-indicator {
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 5px solid #333;
+        }
+        
+        .sort-desc .sort-indicator {
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #333;
+        }
+        
+        th {
+            position: relative;
+            padding-right: 18px;
+        }
+        
+        th:hover {
+            background-color: #f0f0f0;
+        }
+        
+        th.sort-asc, th.sort-desc {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Jira Metrics Dashboard</h1>
+            <div class="auth-section">
+                <input type="text" id="jiraUrl" placeholder="Jira URL from backend" readonly>
+                <input type="text" id="email" placeholder="Email from backend" readonly>
+                <input type="password" id="apiToken" placeholder="API Token from backend" readonly>
+                <button id="connectBtn">Refresh Data</button>
+            </div>
+            <div class="board-selection" style="margin-top: 15px; padding: 10px; background-color: #f5f5f5; border-radius: 5px;" id="boardSelector">
+                <label for="boardSelect" style="font-weight: bold; margin-right: 10px;">Filter by Board:</label>
+                <select id="boardSelect" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; margin-right: 10px;">
+                    <option value="">Loading boards...</option>
+                </select>
+                
+                <label for="sprintSelect" style="font-weight: bold; margin-right: 10px; margin-left: 20px;">Sprint:</label>
+                <select id="sprintSelect" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; margin-right: 10px;">
+                    <option value="">Loading sprints...</option>
+                </select>
+                
+                <button id="refreshBtn" style="padding: 6px 12px; background-color: #0052cc; color: white; border: none; border-radius: 4px; cursor: pointer;">Load Tickets</button>
+                
+                <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 15px;">
+                    <label style="font-weight: bold; display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="atRiskOnlyCheckbox" style="margin-right: 5px;">
+                        Show only aging tickets
+                    </label>
+                    
+                    <label style="font-weight: bold; display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="pingPongOnlyCheckbox" style="margin-right: 5px;">
+                        Show only ping-pong tickets
+                    </label>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="metrics-container">
+                <div class="metric-card">
+                    <h3>Total Tickets</h3>
+                    <p id="totalTickets">-</p>
+                </div>
+                <div class="metric-card">
+                    <h3>Average Resolution Time</h3>
+                    <p id="avgResolutionTime">-</p>
+                </div>
+                <div class="metric-card">
+                    <h3>Priority Distribution</h3>
+                    <div id="priorityChart" class="chart"></div>
+                </div>
+                <div class="metric-card">
+                    <h3>Aging Tickets</h3>
+                    <div id="riskSummary" class="chart"></div>
+                </div>
+            </div>
+
+            <!-- Dedicated Cycle Time Analysis Section -->
+            <div class="cycle-time-section">
+                <h2>Workflow Cycle Time Analysis</h2>
+                <p class="section-description">
+                    This analysis shows how long tickets spend moving through each stage of your workflow, helping identify bottlenecks.
+                </p>
+                <div class="cycle-time-container">
+                    <div class="cycle-time-chart" id="phaseResolutionChart"></div>
+                    <div class="cycle-time-insights" id="cycleTimeInsights"></div>
+                </div>
+            </div>
+
+            <div class="ticket-list">
+                <h2>Recent Tickets</h2>
+                <div id="ticketTable">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-sort="key" style="cursor: pointer;">Key <span class="sort-indicator"></span></th>
+                                <th data-sort="summary" style="cursor: pointer;">Summary <span class="sort-indicator"></span></th>
+                                <th data-sort="status" style="cursor: pointer;">Status <span class="sort-indicator"></span></th>
+                                <th data-sort="priority" style="cursor: pointer;">Priority <span class="sort-indicator"></span></th>
+                                <th data-sort="author" style="cursor: pointer; background-color: #e6efff; min-width: 80px;">Author <span class="sort-indicator"></span></th>
+                                <th data-sort="assignee" style="cursor: pointer; background-color: #e6fff0; min-width: 80px;">Assignee <span class="sort-indicator"></span></th>
+                                <th data-sort="created" style="cursor: pointer;">Created <span class="sort-indicator"></span></th>
+                                <th data-sort="risk" style="cursor: pointer;">Aging <span class="sort-indicator"></span></th>
+                                <th data-sort="pingpong" style="cursor: pointer;">Ping-Pong <span class="sort-indicator"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="ticketTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Status Duration Modal -->
+        <div id="statusModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 100;">
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; border-radius: 5px; min-width: 500px; max-width: 80%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;">
+                <h2 id="modalTitle" style="margin-top: 0;">Ticket Status Timeline</h2>
+                <div id="modalContent" style="overflow-y: auto; max-height: calc(90vh - 120px);">
+                    <div class="status-chart" id="statusDurationChart">
+                        <!-- Status duration chart will be rendered here -->
+                    </div>
+                    <div class="status-details" id="statusDurationDetails">
+                        <!-- Detailed status information will be shown here -->
+                    </div>
+                    <div class="status-timeline" id="statusTimeline">
+                        <!-- Status transition timeline will be shown here -->
+                    </div>
+                </div>
+                <button id="closeModalBtn" style="margin-top: 15px; padding: 8px 16px; background-color: #0052cc; color: white; border: none; border-radius: 4px; cursor: pointer; align-self: flex-end;">Close</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html> 

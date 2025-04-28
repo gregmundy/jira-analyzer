@@ -1,0 +1,3 @@
+**/*.py[abc]
+**/__pycache__
+**/.envrc
