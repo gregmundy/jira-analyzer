@@ -668,7 +668,7 @@ class JiraMetrics {
             chartTitle.style.fontSize = '20px';
             chartTitle.style.marginBottom = '15px';
             chartTitle.style.color = '#172B4D';
-            chartTitle.textContent = 'Average Time Spent in Each Workflow Stage';
+            chartTitle.textContent = 'Average Time Spent Per Stage (Unique Tickets)'; // <-- Updated Title 1
             chartWrapper.appendChild(chartTitle);
             
             // Add description
@@ -677,12 +677,15 @@ class JiraMetrics {
             chartDesc.style.color = '#666';
             chartDesc.style.marginBottom = '25px';
             
-            // Add calculation parameters info
+            // Add calculation parameters info - Updated Subtext 1
             const calcParams = this.resolutionMetrics.calculation_params || {};
-            const excludeWeekends = calcParams.exclude_weekends ? 'excluding weekends' : 'including all days';
-            const minThreshold = calcParams.min_time_threshold ? `ignoring periods shorter than ${this.formatDuration(calcParams.min_time_threshold)}` : '';
+            const excludeWeekends = calcParams.exclude_weekends ? 'weekends excluded' : 'weekends included';
+            const minThresholdHours = calcParams.min_time_threshold || 0;
+            const minThresholdDays = (minThresholdHours / 24).toFixed(1);
+            const minThresholdText = minThresholdHours > 0 ? `visits < ${minThresholdDays} days excluded` : 'all visits included';
+            const ticketCountText = 'n = unique tickets entering stage';
             
-            chartDesc.innerHTML = `Average total time tickets spend in each workflow stage, including any return visits to the same stage (${excludeWeekends}, ${minThreshold}).`;
+            chartDesc.innerHTML = `Averages reflect total time each unique ticket spent in a stage, including repeated visits. (${excludeWeekends}, ${minThresholdText}). ${ticketCountText}.`;
             chartWrapper.appendChild(chartDesc);
             
             // Create separate sections for averages and open tickets
@@ -791,8 +794,16 @@ class JiraMetrics {
                 openTitle.style.fontWeight = 'bold';
                 openTitle.style.fontSize = '16px'; // Reduced from 18px
                 openTitle.style.marginBottom = '15px'; // Reduced from 20px
-                openTitle.textContent = 'Average Time in Current Stages (Open Tickets Only)';
+                openTitle.textContent = 'Average Time in Current Stage (Open Tickets)'; // <-- Updated Title 2
                 openSection.appendChild(openTitle);
+                
+                // Add subtext for the open tickets chart - Updated Subtext 2
+                const openDesc = document.createElement('div');
+                openDesc.style.fontSize = '12px';
+                openDesc.style.color = '#666';
+                openDesc.style.marginBottom = '15px';
+                openDesc.textContent = 'Shows the average time open tickets have spent in their current stage so far (current visit only).';
+                openSection.appendChild(openDesc);
                 
                 // Create bars for open ticket metrics
                 const openBarsContainer = document.createElement('div');
