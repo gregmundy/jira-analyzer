@@ -587,8 +587,7 @@ th[data-sort="assignee"], td:nth-child(6) {
     width: 24px;  
     height: 24px;
     border-radius: 50%; 
-    /* vertical-align: middle; /* Not needed in flex context */ */
-    object-fit: cover; 
+    object-fit: cover;
 }
 
 
@@ -748,10 +747,6 @@ th[data-sort="assignee"], td:nth-child(6) {
     text-align: right;
     padding-top: 15px;
     border-top: 1px solid var(--color-border);
-}
-
-#closeModalBtn {
-    /* Styles already defined */
 }
 
 .status-chart,
