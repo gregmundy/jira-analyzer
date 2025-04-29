@@ -904,7 +904,7 @@ class JiraMetrics {
         
         // Add title
         const insightsTitle = document.createElement('h3');
-        insightsTitle.textContent = 'Workflow Insights & Recommendations';
+        insightsTitle.textContent = 'Workflow Insights'; // <-- Removed "& Recommendations"
         insightsTitle.style.fontSize = '16px';
         insightsTitle.style.marginTop = '0';
         insightsWrapper.appendChild(insightsTitle);
@@ -1012,12 +1012,6 @@ class JiraMetrics {
             insightText.style.marginBottom = '5px';
             insightText.innerHTML = insight.text;
             insightItem.appendChild(insightText);
-            
-            const recommendationText = document.createElement('div');
-            recommendationText.style.fontSize = '12px';
-            recommendationText.style.color = '#555';
-            recommendationText.innerHTML = `<strong>Recommendation:</strong> ${insight.recommendation}`;
-            insightItem.appendChild(recommendationText);
             
             insightsList.appendChild(insightItem);
         });
@@ -2249,9 +2243,11 @@ class JiraMetrics {
                 </td>
                 <td>${issue.fields.priority.name}</td>
                 
-                <td class="assignee-cell">
-                    ${assigneeAvatarUrl ? `<img src="${assigneeAvatarUrl}" class="avatar" alt="${assigneeName}" title="${assigneeName}">` : ''}
-                    <span>${assigneeName}</span>
+                <td class="assignee-cell">  
+                    <div class="assignee-inner"> <!-- Added inner div -->
+                        ${assigneeAvatarUrl ? `<img src="${assigneeAvatarUrl}" class="avatar" alt="${assigneeName}" title="${assigneeName}">` : ''}
+                        <span>${assigneeName}</span>
+                    </div>
                 </td>
                 
                 <td>

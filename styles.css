@@ -375,17 +375,17 @@ table {
 
 th, td {
     text-align: left;
-    padding: 12px 15px; /* Consistent padding */
-    border-bottom: 1px solid var(--color-border);
-    vertical-align: middle; /* Keep this */
-    line-height: 1.4; /* Add consistent line-height */
+    padding: 12px 15px;
+    vertical-align: middle;
+    line-height: 1.4;
 }
 
 th {
-    background-color: var(--color-background-primary); /* Subtle header background */
+    background-color: var(--color-background-primary);
     font-weight: 600;
     color: var(--color-text-secondary);
     position: relative;
+    border-bottom: 1px solid var(--color-border);
 }
 
 /* Add specific column header styles */
@@ -419,8 +419,13 @@ th[data-sort]:hover {
     background-color: #e9ecef; /* Light hover */
 }
 
+/* Apply border to table rows instead of cells */
+tr {
+    border-bottom: 1px solid var(--color-border);
+}
+
 tr:hover {
-    background-color: var(--color-highlight); /* Subtle row hover */
+    background-color: var(--color-highlight);
 }
 
 /* Table Sorting Indicators */
@@ -465,7 +470,6 @@ td:nth-child(4) { /* Priority */
 /* td:nth-child(5) is Assignee - handled by .assignee-cell */
 td:nth-child(6) { /* Aging */
     text-align: center; /* Center Aging badge */
-    border-bottom: 1px solid var(--color-border); /* Explicitly re-apply border */
 }
 /* td:nth-child(7) is Churn - handled by .churn-cell */
 
@@ -493,7 +497,6 @@ td:nth-child(6) { /* Aging */
     width: 130px; 
     text-align: center;
     vertical-align: middle;
-    border-bottom: 1px solid var(--color-border); /* Explicitly re-apply border */
 }
 
 .churn-placeholder {
@@ -537,18 +540,20 @@ th[data-sort="assignee"], td:nth-child(6) {
 
 /* --- Avatar Styles --- */
 .assignee-cell {
+    min-width: 180px; 
+    padding: 12px 15px;
+}
+
+.assignee-inner {
     display: flex;
     align-items: center; 
     gap: 8px; 
-    min-width: 180px; 
-    border-bottom: 1px solid var(--color-border); /* Explicitly re-apply border */
 }
 
 .assignee-cell span { 
     white-space: nowrap; 
     overflow: hidden; 
     text-overflow: ellipsis; 
-    /* No specific vertical-align needed due to parent's align-items: center */
 }
 
 .avatar {
