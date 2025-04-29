@@ -117,22 +117,39 @@ main {
 .auth-section,
 .board-selection {
     display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
+    flex-wrap: nowrap;
+    gap: 10px;
     align-items: center;
     margin-bottom: 15px;
 }
 
 .board-selection {
-    padding: 15px;
-    background-color: var(--color-background-primary); /* Match body background */
+    padding: 10px 15px;
+    background-color: var(--color-background-primary);
     border-radius: var(--border-radius-md);
     border: 1px solid var(--color-border);
 }
 
-.board-selection label {
+/* Styling for items directly within board-selection (dropdowns, labels, main button) */
+.board-selection > label,
+.board-selection > select,
+.board-selection > button#refreshBtn { 
+    flex-shrink: 0; 
+    margin-right: 5px; 
+    flex-grow: 0; /* Prevent growing */
+}
+
+.board-selection > label {
     font-weight: 500;
     color: var(--color-text-secondary);
+}
+
+.board-selection > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    width: 100%;
+    margin-top: 10px;
 }
 
 input[type="text"],
@@ -145,7 +162,9 @@ select {
     transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
     background-color: var(--color-background-secondary);
     color: var(--color-text-primary);
-    min-width: 180px; /* Ensure inputs have some base width */
+    min-width: 150px;
+    flex-grow: 1;
+    flex-shrink: 1;
 }
 
 input[type="text"]:focus,
@@ -204,12 +223,13 @@ input[type="checkbox"] {
     vertical-align: middle;
 }
 
-.board-selection label { /* Checkbox labels */
+.board-selection div > label {
     display: flex;
     align-items: center;
     cursor: pointer;
-    font-weight: normal; /* Don't need bold */
+    font-weight: normal;
     color: var(--color-text-primary);
+    margin-right: 10px;
 }
 
 /* --- Cards --- */
@@ -891,4 +911,39 @@ th[data-sort="assignee"], td:nth-child(6) {
      .auth-section input, .board-selection select, .auth-section button, .board-selection button {
         flex-basis: 100%; /* Stack controls */
     }
+}
+
+button#refreshBtn { 
+    flex-grow: 0; 
+    flex-shrink: 0; 
+    padding: 8px 16px; 
+    width: 140px; /* Set fixed width */
+    text-align: center; 
+    box-sizing: border-box; 
+    vertical-align: middle; 
+}
+
+/* Style for the button when loading */
+button#refreshBtn.loading {
+    display: inline-flex; 
+    align-items: center;
+    justify-content: flex-start; /* Align content to the left */
+    cursor: not-allowed; 
+    padding-left: 15px; /* Add left padding for loading state */
+}
+
+/* Spinner styles */
+button#refreshBtn.loading .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s linear infinite;
+    margin-right: 6px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 } 

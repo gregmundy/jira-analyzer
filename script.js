@@ -329,28 +329,7 @@ class JiraMetrics {
         const originalText = refreshBtn.textContent;
         refreshBtn.innerHTML = '<span class="spinner"></span> Loading...';
         refreshBtn.disabled = true;
-        
-        // Add spinner style if not already in the document
-        if (!document.getElementById('spinnerStyle')) {
-            const style = document.createElement('style');
-            style.id = 'spinnerStyle';
-            style.textContent = `
-                .spinner {
-                    display: inline-block;
-                    width: 12px;
-                    height: 12px;
-                    border: 2px solid rgba(255,255,255,0.3);
-                    border-radius: 50%;
-                    border-top-color: white;
-                    animation: spin 1s linear infinite;
-                    margin-right: 6px;
-                }
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
-                }
-            `;
-            document.head.appendChild(style);
-        }
+        refreshBtn.classList.add('loading'); // Add loading class
         
         // Reset the issue data store
         this.issueData = {};
@@ -452,6 +431,7 @@ class JiraMetrics {
             // Restore button text and enable button
             refreshBtn.innerHTML = originalText;
             refreshBtn.disabled = false;
+            refreshBtn.classList.remove('loading'); // Remove loading class
         }
     }
     
@@ -2877,19 +2857,15 @@ class JiraMetrics {
     }
     
     formatDuration(hours) {
-        if (hours < 1) {
-            // Less than 1 hour, show in minutes
-            const minutes = Math.round(hours * 60);
-            return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-        } else if (hours < 24) {
-            // Less than 24 hours, show in hours
-            const roundedHours = Math.round(hours * 10) / 10;
-            return `${roundedHours} hour${roundedHours !== 1 ? 's' : ''}`;
-        } else {
-            // More than 24 hours, show in days
-            const days = Math.round(hours / 24 * 10) / 10;
-            return `${days} day${days !== 1 ? 's' : ''}`;
+        if (hours === undefined || hours === null || isNaN(hours)) {
+            return '-'; // Handle invalid input
         }
+        const days = hours / 24;
+        if (days < 0.05 && hours > 0) { // If less than ~1 hour, show '< 0.1 days'
+            return '< 0.1 days';
+        }
+        const roundedDays = Math.round(days * 10) / 10; // Round to 1 decimal place
+        return `${roundedDays} day${roundedDays === 1.0 ? '' : 's'}`; // Pluralize based on rounded value being exactly 1.0
     }
     
     getStatusColor(status) {
