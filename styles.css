@@ -201,19 +201,6 @@ button:hover {
 button:active {
     transform: translateY(1px);
 }
-
-/* Specific Buttons */
-#connectBtn,
-#refreshBtn,
-#refresh-metrics,
-#closeModalBtn {
-    /* Base styles already applied */
-}
-
-#refresh-metrics {
-    /* Minor style adjustments if needed */
-}
-
 /* Checkboxes */
 input[type="checkbox"] {
     margin-right: 8px;
@@ -472,9 +459,6 @@ td a { /* Links within table cells */
 
 /* Apply specific cell styles */
 /* Corrected selectors based on HTML structure */
-td:nth-child(1) { /* Key */ }
-td:nth-child(2) { /* Summary */ }
-td:nth-child(3) { /* Status */ }
 td:nth-child(4) { /* Priority */
     text-align: center; /* Center Priority */
 }
@@ -539,22 +523,6 @@ td:nth-child(6) { /* Aging */
     padding: 2px 6px;
     border-radius: var(--border-radius-sm);
     font-size: 0.9em;
-}
-.high-churn-row td {
-    /* All special styling removed */
-}
-.high-churn-row:hover td {
-    /* All special styling removed */
-}
-.ping-pong { /* Table row style for churn */
-    /* border-left: 4px solid #6554c0; /* Purple? */
-    /* Add padding to the cell content */
-    /* td:first-child { padding-left: 11px; } */
-}
-.high-ping-pong {
-    /* border-left: 4px solid #403294; /* Darker Purple? */
-    /* Add padding to the cell content */
-    /* td:first-child { padding-left: 11px; } */
 }
 
 /* Specific Cell Highlights - Remove column backgrounds */
