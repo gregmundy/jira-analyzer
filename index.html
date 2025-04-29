@@ -116,6 +116,32 @@
         .ticket-list tr:hover {
             background-color: #f5f5f5;
         }
+
+        .modal-content {
+            /* position: absolute; */ /* Remove conflicting positioning */
+            /* top: 50%; */
+            /* left: 50%; */
+            /* transform: translate(-50%, -50%); */
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            min-width: 700px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-body {
+            overflow-y: auto;
+            max-height: calc(90vh - 120px);
+        }
+
+        .modal-footer {
+            margin-top: 15px;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -225,10 +251,11 @@
                                 <th data-sort="summary" style="cursor: pointer;">Summary <span class="sort-indicator"></span></th>
                                 <th data-sort="status" style="cursor: pointer;">Status <span class="sort-indicator"></span></th>
                                 <th data-sort="priority" style="cursor: pointer;">Priority <span class="sort-indicator"></span></th>
-                                <th data-sort="author" style="cursor: pointer; background-color: #e6efff; min-width: 80px;">Author <span class="sort-indicator"></span></th>
-                                <th data-sort="assignee" style="cursor: pointer; background-color: #e6fff0; min-width: 80px;">Assignee <span class="sort-indicator"></span></th>
-                                <th data-sort="created" style="cursor: pointer;">Created <span class="sort-indicator"></span></th>
+                                <!-- <th data-sort="author" style="cursor: pointer; background-color: #e6efff; min-width: 80px;">Author <span class="sort-indicator"></span></th> -->
+                                <th data-sort="assignee" style="cursor: pointer; min-width: 80px;">Assignee <span class="sort-indicator"></span></th>
+                                <!-- <th data-sort="created" style="cursor: pointer;">Created <span class="sort-indicator"></span></th> -->
                                 <th data-sort="risk" style="cursor: pointer;">Aging <span class="sort-indicator"></span></th>
+                                <!-- <th data-sort="pingpong_score" style="cursor: pointer;">Ping Pong <span class="sort-indicator"></span></th> -->
                                 <th data-sort="pingpong" style="cursor: pointer;">Ticket Churn <span class="sort-indicator"></span></th>
                             </tr>
                         </thead>
@@ -240,10 +267,10 @@
         </main>
         
         <!-- Status Duration Modal -->
-        <div id="statusModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 100;">
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 20px; border-radius: 5px; min-width: 700px; max-width: 90%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;">
-                <h2 id="modalTitle" style="margin-top: 0;">Ticket Status Timeline</h2>
-                <div id="modalContent" style="overflow-y: auto; max-height: calc(90vh - 120px);">
+        <div id="statusModal">
+            <div class="modal-content">
+                <h2 id="modalTitle">Ticket Status Timeline</h2>
+                <div class="modal-body" id="modalContent">
                     <div class="status-chart" id="statusDurationChart">
                         <!-- Status duration chart will be rendered here -->
                     </div>
@@ -254,7 +281,9 @@
                         <!-- Status transition timeline will be shown here -->
                     </div>
                 </div>
-                <button id="closeModalBtn" style="margin-top: 15px; padding: 8px 16px; background-color: #0052cc; color: white; border: none; border-radius: 4px; cursor: pointer; align-self: flex-end;">Close</button>
+                <div class="modal-footer">
+                     <button id="closeModalBtn">Close</button>
+                </div>
             </div>
         </div>
     </div>

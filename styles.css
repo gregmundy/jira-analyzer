@@ -1,695 +1,288 @@
+/* --- Reset & Base Styles --- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
 :root {
-    --primary-color: #0052cc;
-    --secondary-color: #172b4d;
-    --background-color: #f4f5f7;
-    --card-background: #ffffff;
-    --text-color: #172b4d;
-    --border-color: #dfe1e6;
-}
+    --font-primary: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    --color-primary: #0052cc; /* Atlassian Blue */
+    --color-primary-dark: #003d99;
+    --color-text-primary: #172b4d; /* Dark Grey */
+    --color-text-secondary: #5e6c84; /* Medium Grey */
+    --color-text-on-primary: #ffffff;
+    --color-background-primary: #f4f5f7; /* Light Grey */
+    --color-background-secondary: #ffffff; /* White */
+    --color-border: #dfe1e6; /* Light Border Grey */
+    --color-border-focus: #4c9aff; /* Focus Blue */
+    --color-danger: #de350b; /* Red */
+    --color-warning: #ffab00; /* Yellow */
+    --color-success: #36b37e; /* Green */
+    --color-highlight: #e6f0ff; /* Light Blue Highlight */
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background-color: var(--background-color);
-    color: var(--text-color);
-    line-height: 1.5;
-}
-
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-}
-
-header {
-    margin-bottom: 2rem;
-}
-
-h1 {
-    color: var(--secondary-color);
-    margin-bottom: 1.5rem;
-}
-
-.auth-section {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-bottom: 2rem;
-}
-
-input {
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: 3px;
-    font-size: 1rem;
-}
-
-button {
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 1rem;
-}
-
-button:hover {
-    background-color: #0065ff;
-}
-
-.metrics-container {
-    display: grid;
-    /* Use a fixed 4-column layout */
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.metric-card {
-    flex: 1;
-    min-width: 200px;
-    background-color: #fff;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.metric-card.full-width {
-    flex: 100%;
-    width: 100%;
-}
-
-.metric-card h3 {
-    color: var(--secondary-color);
-    margin-bottom: 1rem;
-    font-size: 1.1rem;
-}
-
-.metric-card p {
-    font-size: 1.5rem;
-    font-weight: bold;
-}
-
-.chart {
-    width: 100%;
-    background-color: #f9f9f9;
-    border-radius: 4px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    color: #666;
-    padding: 10px;
-}
-
-#phaseResolutionChart {
-    height: 300px;
-    width: 100%;
-    margin-top: 15px;
-}
-
-.ticket-list {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.ticket-list h2 {
-    color: #0052cc;
-    margin-bottom: 15px;
-}
-
-#ticketTable {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    text-align: left;
-    padding: 12px 15px;
-    border-bottom: 1px solid #ddd;
-}
-
-th {
-    background-color: #f7f7f7;
-    font-weight: bold;
-}
-
-tr:hover {
-    background-color: #f5f5f5;
-}
-
-/* Reset and base styles */
-body, h1, h2, h3, p, table, tr, th, td {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --border-radius-sm: 3px;
+    --border-radius-md: 5px;
+    --border-radius-lg: 8px;
+    --transition-speed: 0.2s ease-in-out;
 }
 
 body {
-    font-family: Arial, sans-serif;
+    font-family: var(--font-primary);
+    background-color: var(--color-background-primary);
+    color: var(--color-text-primary);
     line-height: 1.6;
-    color: #333;
-    background-color: #f7f9fc;
+    font-size: 14px; /* Base font size */
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1400px; /* Slightly wider */
     margin: 0 auto;
-    padding: 20px;
+    padding: 25px;
 }
 
-/* Header */
+/* --- Typography --- */
+h1 {
+    font-size: 2em; /* ~28px */
+    color: var(--color-text-primary);
+    margin-bottom: 20px;
+    font-weight: 600;
+}
+
+h2 {
+    font-size: 1.5em; /* ~21px */
+    color: var(--color-primary);
+    margin-bottom: 20px;
+    font-weight: 500;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 10px;
+}
+
+h3 {
+    font-size: 1.2em; /* ~17px */
+    color: var(--color-text-primary);
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+h4 {
+    font-size: 1em; /* ~14px */
+    color: var(--color-text-secondary);
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color var(--transition-speed);
+}
+
+a:hover {
+    color: var(--color-primary-dark);
+    text-decoration: underline;
+}
+
+/* --- Layout & Sections --- */
 header {
     margin-bottom: 30px;
-}
-
-h1 {
-    color: #0052cc;
-    margin-bottom: 15px;
-}
-
-.auth-section {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
-.auth-section input {
-    flex: 1;
-    min-width: 150px;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-#connectBtn, #refreshBtn {
-    background-color: #0052cc;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-#connectBtn:hover, #refreshBtn:hover {
-    background-color: #003d99;
-}
-
-/* Metrics */
-.metrics-container {
-    display: grid;
-    /* Use a fixed 4-column layout */
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.metric-card {
-    background-color: white;
-    border-radius: 8px;
+    background-color: var(--color-background-secondary);
     padding: 20px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.metric-card h3 {
-    color: #0052cc;
-    margin-bottom: 10px;
-    font-size: 1rem;
-}
-
-.metric-card p {
-    font-size: 1.5rem;
-    font-weight: bold;
-}
-
-.chart {
-    width: 100%;
-    background-color: #f9f9f9;
-    border-radius: 4px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    color: #666;
-    padding: 10px;
-}
-
-/* Ticket List */
-.ticket-list {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.ticket-list h2 {
-    color: #0052cc;
-    margin-bottom: 15px;
-}
-
-#ticketTable {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    text-align: left;
-    padding: 12px 15px;
-    border-bottom: 1px solid #ddd;
-}
-
-th {
-    background-color: #f7f7f7;
-    font-weight: bold;
-}
-
-tr:hover {
-    background-color: #f5f5f5;
-}
-
-/* Risk Indicators */
-.high-risk {
-    border-left: 4px solid #ff5630;
-}
-
-.medium-risk {
-    border-left: 4px solid #ffab00;
-}
-
-.low-risk {
-    border-left: 4px solid #36b37e;
-}
-
-/* Status duration modal */
-.status-chart, .status-details, .status-timeline {
-    margin-bottom: 20px;
-    max-height: 60vh;
-    overflow-y: auto;
-}
-
-.status-timeline-item {
-    padding: 8px;
-    margin-bottom: 6px;
-    border-radius: 4px;
-    background-color: #f5f5f5;
-    display: flex;
-    justify-content: space-between;
-}
-
-.status-timeline-item.highlight {
-    background-color: #ffe2d1;
-}
-
-.transition-arrow {
-    margin: 0 8px;
-    color: #888;
-}
-
-/* Ping-pong ticket style */
-.ping-pong {
-    border: 2px dashed #7d68df;
-}
-
-.high-ping-pong {
-    border: 2px dashed #5243aa;
-}
-
-/* Style for table rows with high churn */
-.high-churn-row td {
-    /* Add a subtle indicator, like a dotted border */
-    border-bottom: 2px dotted #DE350B !important; /* Red dotted line, !important to override default border */
-}
-/* Optional: Add slightly different background */
-.high-churn-row:hover {
-    background-color: #FFF8F7 !important; /* Very light red on hover */
-}
-
-.ping-pong-score {
-    font-weight: bold;
-    color: #5243aa;
-}
-
-@media (max-width: 768px) {
-    .metrics-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .auth-section {
-        flex-direction: column;
-    }
-    
-    .auth-section input, #connectBtn {
-        width: 100%;
-    }
-}
-
-/* Cycle Time Analysis Section */
-.cycle-time-section {
-    background-color: white;
-    border-radius: 10px;
-    padding: 30px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-    width: 100%;
-}
-
-.cycle-time-section h2 {
-    color: #0052cc;
-    margin-bottom: 15px;
-    font-size: 22px;
-    text-align: center;
-}
-
-.section-description {
-    text-align: center;
-    color: #555;
-    margin-bottom: 25px;
-    font-size: 15px;
-    max-width: 900px;
-    margin-left: auto;
-    margin-right: auto;
-    line-height: 1.6;
-}
-
-.cycle-time-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.cycle-time-chart {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
-}
-
-.cycle-time-insights {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    border-left: 4px solid #0052cc;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
-}
-
-.cycle-metric {
-    margin-bottom: 15px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.cycle-metric-label {
-    width: 140px;
-    font-weight: bold;
-}
-
-.cycle-metric-value {
-    font-size: 18px;
-    font-weight: bold;
-    color: #0052cc;
-}
-
-.cycle-metric-bar {
-    flex: 1;
-    height: 10px;
-    background-color: #e0e0e0;
-    border-radius: 5px;
-    overflow: hidden;
-    position: relative;
-}
-
-.cycle-metric-bar-fill {
-    height: 100%;
-    background-color: #36B37E;
-}
-
-.workflow-diagram {
-    margin-top: 30px;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    gap: 10px;
-}
-
-.workflow-stage {
-    background-color: #f5f7fa;
-    border-radius: 8px;
-    padding: 12px 18px;
-    text-align: center;
-    position: relative;
-    min-width: 120px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.workflow-arrow {
-    flex: 1;
-    height: 2px;
-    background-color: #ddd;
-    position: relative;
-    margin: 0 10px;
-}
-
-.workflow-arrow::after {
-    content: "→";
-    position: absolute;
-    top: -10px;
-    right: -5px;
-    color: #999;
-    font-size: 20px;
-}
-
-@media (min-width: 992px) {
-    .cycle-time-container {
-        flex-direction: row;
-    }
-    
-    .cycle-time-chart {
-        flex: 7;
-    }
-    
-    .cycle-time-insights {
-        flex: 3;
-    }
-}
-
-@media (max-width: 768px) {
-    .cycle-time-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .workflow-diagram {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .workflow-arrow {
-        height: 20px;
-        width: 2px;
-        margin: 10px auto;
-    }
-    
-    .workflow-arrow::after {
-        content: "↓";
-        top: auto;
-        right: -8px;
-        bottom: -10px;
-    }
-}
-
-#agingTicketsCard {
-    grid-column: span 3; /* Span 3 columns */
-}
-
-#priorityCard {
-    grid-column: span 1; /* Span 1 column */
-}
-
-/* Aging Tickets Card Enhancements */
-#agingTicketsCard .chart {
-    background-color: transparent; /* Remove default chart background */
-    padding: 0;
-    align-items: stretch; /* Allow content to fill width */
-}
-
-.risk-summary-content {
-    width: 100%;
-}
-
-.risk-overall-summary {
-    text-align: center;
-    padding: 10px;
-    background-color: #f4f5f7;
-    border-radius: 4px;
-    margin-bottom: 20px;
-    font-size: 1.1em;
-}
-
-.risk-breakdown-section {
-    margin-bottom: 20px;
-}
-
-.risk-breakdown-section h4 {
-    margin-bottom: 10px;
-    color: #172b4d;
-    font-size: 1em;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 5px;
-}
-
-.risk-summary-bar-wrapper {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    gap: 10px;
-}
-
-.risk-summary-label {
-    width: 90px;
-    font-weight: bold;
-    text-align: right;
-    font-size: 0.9em;
-}
-
-.risk-summary-bar-container {
-    flex-grow: 1;
-    height: 18px;
-    background-color: #dfe1e6;
-    border-radius: 9px;
-    overflow: hidden;
-}
-
-.risk-summary-bar-fill {
-    height: 100%;
-    border-radius: 9px;
-}
-
-.risk-summary-count {
-    width: 80px;
-    text-align: left;
-    font-size: 0.9em;
-    color: #42526e;
-}
-
-.risk-threshold-info {
-    margin-top: 20px;
-    padding: 15px;
-    font-size: 0.85em;
-    color: #42526e;
-    background-color: #f4f5f7;
-    border-radius: 4px;
-    line-height: 1.6;
-}
-
-.risk-threshold-info .status-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 6px;
-    vertical-align: middle;
-}
-
-/* Adjust priority chart layout slightly if needed */
-#priorityChart {
-    align-items: stretch;
-    padding: 5px;
-}
-
-/* End Aging Tickets Card Enhancements */
-
-/* Ticket List */
-.ticket-list {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.ticket-list h2 {
-    color: #0052cc;
-    margin-bottom: 15px;
-}
-
-#ticketTable {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    text-align: left;
-    padding: 12px 15px;
-    border-bottom: 1px solid #ddd;
-}
-
-th {
-    background-color: #f7f7f7;
-    font-weight: bold;
-}
-
-tr:hover {
-    background-color: #f5f5f5;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-md);
 }
 
 main {
     display: flex;
     flex-direction: column;
-    gap: 40px; /* Creates space between sections */
+    gap: 30px; /* Consistent spacing */
 }
 
 .section-description {
     text-align: center;
-    color: #555;
+    color: var(--color-text-secondary);
     margin-bottom: 25px;
-    font-size: 15px;
-    max-width: 900px;
+    font-size: 1.1em;
+    max-width: 800px;
     margin-left: auto;
     margin-right: auto;
-    line-height: 1.6;
 }
 
+/* --- Forms & Controls (Header Controls) --- */
+.auth-section,
+.board-selection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.board-selection {
+    padding: 15px;
+    background-color: var(--color-background-primary); /* Match body background */
+    border-radius: var(--border-radius-md);
+    border: 1px solid var(--color-border);
+}
+
+.board-selection label {
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+input[type="text"],
+input[type="password"],
+select {
+    padding: 8px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    font-size: 1em;
+    transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+    background-color: var(--color-background-secondary);
+    color: var(--color-text-primary);
+    min-width: 180px; /* Ensure inputs have some base width */
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+select:focus {
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 0 2px rgba(76, 154, 255, 0.3);
+    outline: none;
+}
+
+input[readonly] {
+    background-color: var(--color-background-primary); /* Visually distinct */
+    cursor: not-allowed;
+    color: var(--color-text-secondary);
+}
+
+button {
+    background-color: var(--color-primary);
+    color: var(--color-text-on-primary);
+    border: none;
+    padding: 8px 16px;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 500;
+    transition: background-color var(--transition-speed), box-shadow var(--transition-speed);
+}
+
+button:hover {
+    background-color: var(--color-primary-dark);
+    box-shadow: var(--shadow-sm);
+}
+
+button:active {
+    transform: translateY(1px);
+}
+
+/* Specific Buttons */
+#connectBtn,
+#refreshBtn,
+#refresh-metrics,
+#closeModalBtn {
+    /* Base styles already applied */
+}
+
+#refresh-metrics {
+    /* Minor style adjustments if needed */
+}
+
+/* Checkboxes */
+input[type="checkbox"] {
+    margin-right: 8px;
+    accent-color: var(--color-primary);
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+}
+
+.board-selection label { /* Checkbox labels */
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: normal; /* Don't need bold */
+    color: var(--color-text-primary);
+}
+
+/* --- Cards --- */
+.metric-card,
+.cycle-time-section,
+.ticket-list {
+    background-color: var(--color-background-secondary);
+    border-radius: var(--border-radius-lg);
+    padding: 25px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden; /* Prevent content overflow issues */
+}
+
+.metrics-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Responsive grid */
+    gap: 25px;
+}
+
+/* Card Specific Layouts */
+#agingTicketsCard {
+    grid-column: span 2; /* Adjust span for responsive grid if needed */
+}
+
+#priorityCard {
+    grid-column: span 1; /* Adjust span for responsive grid if needed */
+}
+
+
+/* --- Charts --- */
+.chart {
+    width: 100%;
+    min-height: 200px; /* Ensure charts have some height */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--color-text-secondary);
+    position: relative; /* For potential tooltips or labels */
+}
+
+/* Override generic chart styles for custom HTML charts */
+#priorityChart,
+#riskSummary {
+    display: block; /* Allow content to flow naturally */
+    align-items: initial; /* Reset alignment */
+    justify-content: initial; /* Reset justification */
+    min-height: auto; /* Allow natural height */
+}
+
+#phaseResolutionChart {
+    /* height: 350px; */ /* Remove fixed height */
+    min-height: 350px; /* Ensure minimum space */
+    width: 100%;
+}
+
+/* --- Cycle Time Section --- */
 .cycle-time-container {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 25px;
 }
 
-.cycle-time-chart {
-    background-color: white;
-    border-radius: 8px;
+.cycle-time-chart,
+.cycle-time-insights {
+    border: 1px solid var(--color-border); /* Add subtle border */
     padding: 20px;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+    box-shadow: none; /* Use border instead of shadow */
+    border-radius: var(--border-radius-md);
 }
 
 .cycle-time-insights {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    border-left: 4px solid #0052cc;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+    border-left: 4px solid var(--color-primary);
+    background-color: #f8f9fa; /* Slightly different background */
 }
 
 .cycle-metric {
@@ -701,117 +294,289 @@ main {
 
 .cycle-metric-label {
     width: 140px;
-    font-weight: bold;
+    font-weight: 500;
+    color: var(--color-text-secondary);
 }
 
 .cycle-metric-value {
-    font-size: 18px;
-    font-weight: bold;
-    color: #0052cc;
+    font-size: 1.2em;
+    font-weight: 600;
+    color: var(--color-primary);
 }
 
 .cycle-metric-bar {
     flex: 1;
-    height: 10px;
-    background-color: #e0e0e0;
-    border-radius: 5px;
+    height: 8px;
+    background-color: #e9ecef; /* Lighter bar background */
+    border-radius: 4px;
     overflow: hidden;
-    position: relative;
 }
 
 .cycle-metric-bar-fill {
     height: 100%;
-    background-color: #36B37E;
+    background-color: var(--color-success); /* Use success color */
+    border-radius: 4px;
 }
 
+/* --- Workflow Diagram --- */
 .workflow-diagram {
-    margin-top: 30px;
+    margin-top: 25px;
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
+    justify-content: flex-start; /* Align left */
     align-items: center;
-    padding: 10px 0;
-    gap: 10px;
+    padding: 15px 0;
+    gap: 10px; /* Gap between stages */
+    border-top: 1px solid var(--color-border);
 }
 
 .workflow-stage {
-    background-color: #f5f7fa;
-    border-radius: 8px;
-    padding: 12px 18px;
+    background-color: #e6f0ff; /* Light blue background */
+    border: 1px solid #b3d4ff;
+    border-radius: var(--border-radius-md);
+    padding: 10px 15px;
     text-align: center;
-    position: relative;
-    min-width: 120px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    font-weight: 500;
+    color: var(--color-primary-dark);
+    min-width: 100px;
 }
 
 .workflow-arrow {
-    flex: 1;
-    height: 2px;
-    background-color: #ddd;
-    position: relative;
-    margin: 0 10px;
+    flex: 0 0 auto; /* Don't grow/shrink, keep size */
+    color: var(--color-text-secondary);
+    font-size: 1.5em;
+    margin: 0 5px;
+    line-height: 1;
 }
 
 .workflow-arrow::after {
     content: "→";
-    position: absolute;
-    top: -10px;
-    right: -5px;
-    color: #999;
-    font-size: 20px;
 }
 
-@media (min-width: 992px) {
-    .cycle-time-container {
-        flex-direction: row;
-    }
-    
-    .cycle-time-chart {
-        flex: 7;
-    }
-    
-    .cycle-time-insights {
-        flex: 3;
-    }
+/* --- Ticket List Table --- */
+#ticketTable {
+    overflow-x: auto; /* Keep horizontal scroll on small screens */
+    width: 100%;
 }
 
-@media (max-width: 768px) {
-    .cycle-time-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .workflow-diagram {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .workflow-arrow {
-        height: 20px;
-        width: 2px;
-        margin: 10px auto;
-    }
-    
-    .workflow-arrow::after {
-        content: "↓";
-        top: auto;
-        right: -8px;
-        bottom: -10px;
-    }
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.95em;
 }
 
-#agingTicketsCard {
-    grid-column: span 3; /* Span 3 columns */
+th, td {
+    text-align: left;
+    padding: 12px 15px; /* Consistent padding */
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle; /* Keep this */
+    line-height: 1.4; /* Add consistent line-height */
 }
 
-#priorityCard {
-    grid-column: span 1; /* Span 1 column */
+th {
+    background-color: var(--color-background-primary); /* Subtle header background */
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    position: relative;
 }
 
-/* Aging Tickets Card Enhancements */
+/* Add specific column header styles */
+th[data-sort="key"],
+th[data-sort="status"],
+th[data-sort="priority"] {
+    white-space: nowrap; /* Keep short headers from wrapping */
+}
+
+th[data-sort="key"] { min-width: 100px; }
+th[data-sort="status"] { min-width: 110px; }
+th[data-sort="priority"] { min-width: 100px; }
+th[data-sort="assignee"] { min-width: 180px; }
+th[data-sort="risk"] { /* Aging */
+    min-width: 100px;
+    text-align: center;
+    white-space: nowrap;
+}
+th[data-sort="pingpong"] { /* Ticket Churn */
+    text-align: center;
+    width: 130px; /* Keep increased width */
+    white-space: nowrap; /* Should fit now */
+}
+
+th[data-sort] {
+    cursor: pointer;
+    transition: background-color var(--transition-speed);
+}
+
+th[data-sort]:hover {
+    background-color: #e9ecef; /* Light hover */
+}
+
+tr:hover {
+    background-color: var(--color-highlight); /* Subtle row hover */
+}
+
+/* Table Sorting Indicators */
+.sort-indicator {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 8px;
+    vertical-align: middle;
+    opacity: 0.6;
+    transition: opacity var(--transition-speed);
+}
+
+th:hover .sort-indicator {
+    opacity: 1;
+}
+
+.sort-asc .sort-indicator {
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 5px solid var(--color-text-secondary);
+    opacity: 1;
+}
+
+.sort-desc .sort-indicator {
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid var(--color-text-secondary);
+    opacity: 1;
+}
+
+/* --- Risk & Churn Indicators --- */
+td a { /* Links within table cells */
+    font-weight: 500;
+}
+
+/* Apply specific cell styles */
+/* Corrected selectors based on HTML structure */
+td:nth-child(1) { /* Key */ }
+td:nth-child(2) { /* Summary */ }
+td:nth-child(3) { /* Status */ }
+td:nth-child(4) { /* Priority */
+    text-align: center; /* Center Priority */
+}
+/* td:nth-child(5) is Assignee - handled by .assignee-cell */
+td:nth-child(6) { /* Aging */
+    text-align: center; /* Center Aging badge */
+    border-bottom: 1px solid var(--color-border); /* Explicitly re-apply border */
+}
+/* td:nth-child(7) is Churn - handled by .churn-cell */
+
+/* Aging Indicators */
+.high-risk {
+    border-left: 4px solid var(--color-danger);
+}
+.medium-risk {
+    border-left: 4px solid var(--color-warning);
+}
+.low-risk {
+    border-left: 4px solid var(--color-success);
+}
+/* Add padding to the cell content */
+.high-risk td:first-child,
+.medium-risk td:first-child,
+.low-risk td:first-child {
+    padding-left: 11px; /* 15px default padding - 4px border */
+}
+
+/* Churn Indicators */
+/* th[data-sort="pingpong"] handled above */
+
+.churn-cell {
+    width: 130px; 
+    text-align: center;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--color-border); /* Explicitly re-apply border */
+}
+
+.churn-placeholder {
+    color: var(--color-text-secondary);
+    font-size: 1.2em;
+    vertical-align: middle; /* Explicitly align placeholder */
+}
+
+.risk-badge, /* Added */
+.ticket-churn-badge {
+    display: inline-block; 
+    padding: 2px 8px; 
+    border-radius: 10px; 
+    font-size: 0.85em; 
+    font-weight: bold; 
+    color: white; 
+    background-color: #6554C0; /* Purple - Note: Risk badge color is overridden inline */
+    line-height: 1.2; /* Adjust line height for better vertical alignment */
+    vertical-align: middle; /* Explicitly align badges */
+}
+
+.ping-pong-score {
+    font-weight: 600;
+    color: var(--color-primary);
+    display: inline-block;
+    background-color: var(--color-highlight);
+    padding: 2px 6px;
+    border-radius: var(--border-radius-sm);
+    font-size: 0.9em;
+}
+.high-churn-row td {
+    /* All special styling removed */
+}
+.high-churn-row:hover td {
+    /* All special styling removed */
+}
+.ping-pong { /* Table row style for churn */
+    /* border-left: 4px solid #6554c0; /* Purple? */
+    /* Add padding to the cell content */
+    /* td:first-child { padding-left: 11px; } */
+}
+.high-ping-pong {
+    /* border-left: 4px solid #403294; /* Darker Purple? */
+    /* Add padding to the cell content */
+    /* td:first-child { padding-left: 11px; } */
+}
+
+/* Specific Cell Highlights - Remove column backgrounds */
+/*
+th[data-sort="author"], td:nth-child(5) { 
+    background-color: rgba(0, 82, 204, 0.05); 
+}
+th[data-sort="assignee"], td:nth-child(6) { 
+    
+}
+*/
+
+/* --- Avatar Styles --- */
+.assignee-cell {
+    display: flex;
+    align-items: center; 
+    gap: 8px; 
+    min-width: 180px; 
+    border-bottom: 1px solid var(--color-border); /* Explicitly re-apply border */
+}
+
+.assignee-cell span { 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    /* No specific vertical-align needed due to parent's align-items: center */
+}
+
+.avatar {
+    width: 24px;  
+    height: 24px;
+    border-radius: 50%; 
+    /* vertical-align: middle; /* Not needed in flex context */ */
+    object-fit: cover; 
+}
+
+
+/* --- Aging Tickets Card Enhancements --- */
 #agingTicketsCard .chart {
-    background-color: transparent; /* Remove default chart background */
+    background-color: transparent;
     padding: 0;
-    align-items: stretch; /* Allow content to fill width */
+    align-items: stretch;
 }
 
 .risk-summary-content {
@@ -820,11 +585,13 @@ main {
 
 .risk-overall-summary {
     text-align: center;
-    padding: 10px;
-    background-color: #f4f5f7;
-    border-radius: 4px;
+    padding: 15px;
+    background-color: var(--color-background-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-md);
     margin-bottom: 20px;
     font-size: 1.1em;
+    font-weight: 500;
 }
 
 .risk-breakdown-section {
@@ -832,55 +599,60 @@ main {
 }
 
 .risk-breakdown-section h4 {
-    margin-bottom: 10px;
-    color: #172b4d;
+    margin-bottom: 15px;
     font-size: 1em;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 5px;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 8px;
 }
 
 .risk-summary-bar-wrapper {
     display: flex;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     gap: 10px;
 }
 
 .risk-summary-label {
     width: 90px;
-    font-weight: bold;
+    font-weight: 500;
     text-align: right;
-    font-size: 0.9em;
+    font-size: 0.95em;
+    color: var(--color-text-secondary);
 }
 
 .risk-summary-bar-container {
     flex-grow: 1;
-    height: 18px;
-    background-color: #dfe1e6;
-    border-radius: 9px;
+    height: 12px; /* Thinner bar */
+    background-color: #e9ecef;
+    border-radius: 6px;
     overflow: hidden;
 }
 
 .risk-summary-bar-fill {
-    height: 100%;
-    border-radius: 9px;
+    display: block;
+    height: 100%; /* Ensure the fill takes up the container height */
+    border-radius: 6px; /* Match container radius */
 }
 
+.risk-summary-bar-fill.high-risk-bar { background-color: var(--color-danger); }
+.risk-summary-bar-fill.medium-risk-bar { background-color: var(--color-warning); }
+.risk-summary-bar-fill.low-risk-bar { background-color: var(--color-success); }
+
 .risk-summary-count {
-    width: 80px;
+    width: 100px; /* More space for count text */
     text-align: left;
-    font-size: 0.9em;
-    color: #42526e;
+    font-size: 0.95em;
+    color: var(--color-text-primary);
 }
 
 .risk-threshold-info {
     margin-top: 20px;
     padding: 15px;
-    font-size: 0.85em;
-    color: #42526e;
-    background-color: #f4f5f7;
-    border-radius: 4px;
-    line-height: 1.6;
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+    background-color: var(--color-background-primary);
+    border-radius: var(--border-radius-md);
+    line-height: 1.7;
 }
 
 .risk-threshold-info .status-dot {
@@ -889,50 +661,234 @@ main {
     height: 10px;
     border-radius: 50%;
     margin-right: 6px;
-    vertical-align: middle;
+    vertical-align: baseline; /* Better alignment */
 }
 
-/* Adjust priority chart layout slightly if needed */
-#priorityChart {
-    align-items: stretch;
-    padding: 5px;
+/* --- Status Duration Modal --- */
+#statusModal {
+    /* display: none; */ /* Keep display:flex for layout */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(9, 30, 66, 0.54); /* Atlassian overlay color */
+    z-index: 1000; /* High z-index */
+    display: flex; /* Use flex for centering */
+    justify-content: center;
+    align-items: center;
+    opacity: 0; /* Start fully transparent */
+    visibility: hidden; /* Start hidden */
+    transition: opacity 0.3s ease-in-out, visibility 0s linear 0.3s; /* Fade opacity, hide instantly after fade */
 }
 
-/* End Aging Tickets Card Enhancements */
-
-/* Ticket List */
-.ticket-list {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+#statusModal.visible {
+    opacity: 1; /* Fade in */
+    visibility: visible; /* Make visible */
+    transition-delay: 0s; /* Apply visibility change immediately */
 }
 
-.ticket-list h2 {
-    color: #0052cc;
+.modal-content {
+    background-color: var(--color-background-secondary);
+    padding: 30px;
+    border-radius: var(--border-radius-lg);
+    width: 90%;
+    max-width: 800px; /* Max width */
+    max-height: 85vh; /* Max height */
+    overflow: hidden; /* Prevent overall modal scroll */
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    transform: scale(0.95); /* Start slightly small */
+    transition: transform 0.3s ease-in-out;
+    margin: auto; /* Ensure centered within flex parent */
+}
+
+#statusModal.visible .modal-content {
+    transform: scale(1);
+}
+
+#modalTitle {
+    margin-top: 0;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 1.6em;
+    color: var(--color-text-primary);
+}
+
+.modal-body {
+    overflow-y: auto; /* Enable scroll only for the body */
+    flex-grow: 1; /* Allow body to take available space */
+    margin-bottom: 20px; /* Space before footer */
+    padding-right: 10px; /* Space for scrollbar */
+}
+
+.modal-footer {
+    text-align: right;
+    padding-top: 15px;
+    border-top: 1px solid var(--color-border);
+}
+
+#closeModalBtn {
+    /* Styles already defined */
+}
+
+.status-chart,
+.status-details,
+.status-timeline {
+    margin-bottom: 25px;
+}
+
+#statusDurationChart {
+    min-height: 250px; /* Ensure chart has height */
+}
+
+.status-timeline-item {
+    padding: 10px 15px;
+    margin-bottom: 8px;
+    border-radius: var(--border-radius-md);
+    background-color: var(--color-background-primary);
+    border: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95em;
+}
+
+.status-timeline-item.highlight {
+    background-color: var(--color-highlight);
+    border-color: var(--color-primary);
+}
+
+.transition-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-name {
+    font-weight: 500;
+}
+
+.transition-arrow {
+    color: var(--color-text-secondary);
+}
+
+.transition-time,
+.transition-author {
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+}
+
+/* --- Loading Indicator --- */
+#loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1100; /* Above modal */
+    opacity: 0; /* Start fully transparent */
+    visibility: hidden; /* Start hidden */
+    /* Simpler transition: fade opacity, hide/show instantly */
+    transition: opacity var(--transition-speed) ease-in-out, visibility 0s linear var(--transition-speed);
+}
+
+#loading.visible {
+    opacity: 1; /* Fade in */
+    visibility: visible; /* Make visible */
+    transition-delay: 0s; /* Apply visibility change immediately */
+}
+
+.loading-content {
+    background-color: var(--color-background-secondary);
+    padding: 30px 40px;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-lg);
+    text-align: center;
+    color: var(--color-text-primary);
+}
+
+.spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(0, 82, 204, 0.2); /* Lighter border */
+    border-radius: 50%;
+    border-top-color: var(--color-primary);
+    animation: spin 1s linear infinite;
     margin-bottom: 15px;
 }
 
-#ticketTable {
-    overflow-x: auto;
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
+/* --- Utility Classes --- */
+.hidden {
+    display: none !important;
 }
 
-th, td {
-    text-align: left;
-    padding: 12px 15px;
-    border-bottom: 1px solid #ddd;
+/* --- Responsiveness --- */
+@media (max-width: 992px) {
+    .container {
+        padding: 20px;
+    }
+    h1 { font-size: 1.8em; }
+    h2 { font-size: 1.4em; }
+    .metrics-container {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+    }
+    #agingTicketsCard { grid-column: span 1; } /* Stack on smaller screens */
+    #priorityCard { grid-column: span 1; }
+
+    .cycle-time-container {
+        flex-direction: column;
+    }
 }
 
-th {
-    background-color: #f7f7f7;
-    font-weight: bold;
+@media (max-width: 768px) {
+    body { font-size: 13px; }
+    .container { padding: 15px; }
+    h1 { font-size: 1.6em; margin-bottom: 15px; }
+    h2 { font-size: 1.3em; margin-bottom: 15px; }
+
+    header { padding: 15px; margin-bottom: 20px; }
+    .auth-section, .board-selection { gap: 10px; }
+    .auth-section input, .board-selection select, .auth-section button, .board-selection button {
+        min-width: 100px; /* Allow smaller controls */
+        flex-basis: 45%; /* Try to fit two per line */
+        flex-grow: 1;
+    }
+
+    .metrics-container {
+        grid-template-columns: 1fr 1fr; /* Two columns */
+        gap: 15px;
+    }
+
+    .metric-card, .cycle-time-section, .ticket-list { padding: 15px; }
+
+    th, td { padding: 10px 8px; } /* Less padding in table */
+
+    .workflow-diagram { flex-direction: column; align-items: stretch; }
+    .workflow-arrow { height: 20px; width: 2px; margin: 10px auto; }
+    .workflow-arrow::after { content: "↓"; top: auto; right: -8px; bottom: -10px; }
+
+    .modal-content { width: 95%; max-width: none; padding: 20px; }
+    #modalTitle { font-size: 1.4em; }
 }
 
-tr:hover {
-    background-color: #f5f5f5;
+@media (max-width: 480px) {
+    .metrics-container {
+        grid-template-columns: 1fr; /* Single column */
+    }
+     .auth-section input, .board-selection select, .auth-section button, .board-selection button {
+        flex-basis: 100%; /* Stack controls */
+    }
 } 

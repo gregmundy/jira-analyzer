@@ -91,7 +91,8 @@ class JiraMetrics {
         
         // Modal close button
         document.getElementById('closeModalBtn').addEventListener('click', () => {
-            document.getElementById('statusModal').style.display = 'none';
+            // document.getElementById('statusModal').style.display = 'none'; // Old method
+            document.getElementById('statusModal').classList.remove('visible'); // New method
         });
         
         // Filter checkboxes
@@ -102,6 +103,17 @@ class JiraMetrics {
         document.getElementById('pingPongOnlyCheckbox').addEventListener('change', () => {
             this.updateDisplayedTickets();
         });
+
+        // Dismiss modal on outside click
+        const statusModal = document.getElementById('statusModal');
+        if (statusModal) {
+            statusModal.addEventListener('click', (event) => {
+                // Check if the click target is the modal overlay itself
+                if (event.target === statusModal) {
+                    statusModal.classList.remove('visible');
+                }
+            });
+        }
     }
 
     async loadConfig() {
@@ -1670,6 +1682,7 @@ class JiraMetrics {
         // Track the sequence of status categories
         const categorySequence = [];
         const actualChurnTransitions = []; // Array to store only churn-contributing transitions
+        const transitions = []; // Add this line to define the array
         let churnScore = 0;
         const churnCounts = {
             'in_progress_to_to_do': 0,
@@ -2172,6 +2185,27 @@ class JiraMetrics {
             let author = 'Unknown';
             let assignee = 'Unassigned';
             
+            // --- Assignee and Avatar --- 
+            let assigneeName = 'Unassigned';
+            let assigneeAvatarUrl = null; // Variable to hold the avatar URL
+
+            if (issue.fields.assignee) {
+                // Get display name
+                if (issue.fields.assignee.displayName) {
+                    assigneeName = issue.fields.assignee.displayName;
+                } else if (issue.fields.assignee.name) {
+                    assigneeName = issue.fields.assignee.name; // Fallback to name
+                } else if (typeof issue.fields.assignee === 'string') {
+                    assigneeName = issue.fields.assignee; // Fallback if it's just a string
+                }
+
+                // Get avatar URL (check if avatarUrls and 16x16 exist)
+                if (issue.fields.assignee.avatarUrls && issue.fields.assignee.avatarUrls['16x16']) {
+                    assigneeAvatarUrl = issue.fields.assignee.avatarUrls['16x16'];
+                }
+            }
+            // --- End Assignee --- 
+            
             // For author/reporter
             if (issue.fields.reporter) {
                 if (issue.fields.reporter.displayName) {
@@ -2183,17 +2217,6 @@ class JiraMetrics {
                 }
             } else if (issue.fields.creator && issue.fields.creator.displayName) {
                 author = issue.fields.creator.displayName;
-            }
-            
-            // For assignee
-            if (issue.fields.assignee) {
-                if (issue.fields.assignee.displayName) {
-                    assignee = issue.fields.assignee.displayName;
-                } else if (issue.fields.assignee.name) {
-                    assignee = issue.fields.assignee.name;
-                } else if (typeof issue.fields.assignee === 'string') {
-                    assignee = issue.fields.assignee;
-                }
             }
             
             console.log(`Ticket ${issue.key} - Found Author: ${author}, Assignee: ${assignee}`);
@@ -2212,10 +2235,12 @@ class JiraMetrics {
                 row.style.border = '2px dashed #6554C0'; // Purple border for back-and-forth tickets
             }
             
-            // If it's a ticket churn, add a border
+            // Remove the border style for ticket churn
+            /* 
             if (isChurn) {
                 row.style.border = '2px dashed #6554C0'; // Purple border for ticket churn tickets
             }
+            */
             
             // If it's a high churn ticket, add a specific class for styling
             if (isChurn) {
@@ -2232,9 +2257,12 @@ class JiraMetrics {
                     ${isAging ? `<div style="font-size: 0.8em; color: #666;">${timeInStatus}</div>` : ''}
                 </td>
                 <td>${issue.fields.priority.name}</td>
-                <td style="background-color: #f0f4ff; min-width: 80px;">${author}</td>
-                <td style="background-color: #f0fff4; min-width: 80px;">${assignee}</td>
-                <td>${new Date(issue.fields.created).toLocaleDateString()}</td>
+                
+                <td class="assignee-cell">
+                    ${assigneeAvatarUrl ? `<img src="${assigneeAvatarUrl}" class="avatar" alt="${assigneeName}" title="${assigneeName}">` : ''}
+                    <span>${assigneeName}</span>
+                </td>
+                
                 <td>
                     ${isAging ? `
                         <span class="risk-badge" style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold; color: white; background-color: ${
@@ -2246,19 +2274,12 @@ class JiraMetrics {
                         </span>
                     ` : ''}
                 </td>
-                <td>
-                    ${issueData.isPingPong && issueData.pingPongScore > 0 ? `
-                        <span class="ticket-churn-badge" style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold; color: white; background-color: #6554C0;">
-                            ${issueData.pingPongScore}
-                        </span>
-                    ` : ''}
-                </td>
-                <td>
+                <td class="churn-cell">
                     ${isChurn ? `
-                        <span class="ticket-churn-badge" style="display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.85em; font-weight: bold; color: white; background-color: #6554C0;" title="Ticket Churn Score: ${churnScore}">
+                        <span class="ticket-churn-badge" title="Ticket Churn Score: ${churnScore}">
                             ${churnScore}
                         </span>
-                    ` : '-'} 
+                    ` : '<span class="churn-placeholder">-</span>'} 
                 </td>
             `;
             
@@ -2273,13 +2294,19 @@ class JiraMetrics {
         const closeModalBtn = document.getElementById('closeModalBtn');
         if (closeModalBtn) {
             closeModalBtn.addEventListener('click', () => {
-                document.getElementById('statusModal').style.display = 'none';
+                // document.getElementById('statusModal').style.display = 'none'; // Old method
+                document.getElementById('statusModal').classList.remove('visible'); // New method
             });
         }
     }
     
     async showStatusDurations(issueKey) {
+        console.log(`Attempting to show modal for issue: ${issueKey}`); // Add this line
         console.log(`Showing status durations for ${issueKey}`);
+
+        // Ensure main loading overlay is hidden
+        const loadingOverlay = document.getElementById('loading');
+        if (loadingOverlay) loadingOverlay.classList.remove('visible');
         
         // Show modal with loading state
         const modal = document.getElementById('statusModal');
@@ -2302,7 +2329,8 @@ class JiraMetrics {
         statusTimeline.innerHTML = '';
         if (pingPongSection) pingPongSection.innerHTML = '';
         if (churnSection) churnSection.innerHTML = '';
-        modal.style.display = 'block';
+        // modal.style.display = 'block'; // Old method
+        modal.classList.add('visible'); // New method using CSS class
         
         // Check if we already have the data
         if (this.issueData[issueKey]) {
@@ -2341,6 +2369,7 @@ class JiraMetrics {
     }
     
     displayStatusData(issueKey, data) {
+        console.log(`Displaying modal content for: ${issueKey}`); // Add this log
         const modalTitle = document.getElementById('modalTitle');
         const statusDurationChart = document.getElementById('statusDurationChart');
         const statusDurationDetails = document.getElementById('statusDurationDetails');
