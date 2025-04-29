@@ -5,7 +5,7 @@ import base64
 import logging
 import os
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -569,6 +569,10 @@ def get_resolution_metrics():
         max_results = int(request.args.get('maxResults', '200'))  # Increased to get more data
         board = request.args.get('board')
         
+        # Get optional filtering parameters
+        exclude_weekends = request.args.get('excludeWeekends', 'true').lower() == 'true'
+        min_time_threshold = float(request.args.get('minTimeThreshold', '0.167'))  # Default to 10 minutes (0.167 hours)
+        
         # If board is specified, add it to the JQL query
         if board:
             logger.debug(f"Filtering by board/project: {board}")
@@ -579,6 +583,7 @@ def get_resolution_metrics():
                 jql = f"project = {board} AND ({jql})"
                 
         logger.debug(f"Using JQL query for metrics: {jql}")
+        logger.debug(f"Configuration: exclude_weekends={exclude_weekends}, min_time_threshold={min_time_threshold}")
             
         # Create auth header
         auth_header = f"Basic {base64.b64encode(f'{email}:{api_token}'.encode()).decode()}"
@@ -612,415 +617,442 @@ def get_resolution_metrics():
         
         logger.debug(f"Found {len(issues)} issues for analysis")
         
-        # Define status categories for transition tracking
-        status_categories = {
-            'to_do': ['TO DO', 'To Do', 'Backlog', 'Open', 'New', 'Product Backlog'],
-            'in_progress': ['IN PROGRESS', 'In Progress', 'Development', 'Implementing', 'Dev', 'Coding'],
-            'in_review': ['IN REVIEW', 'In Review', 'Code Review', 'Review', 'Reviewing', 'PR Review'],
-            'in_qa': ['IN QA', 'In QA', 'QA', 'Testing', 'Validation', 'Test'],
-            'done': ['DONE', 'Done', 'Closed', 'Resolved', 'Completed', 'Fixed']
+        # Define workflow stages to track (meaningful states)
+        workflow_stages = {
+            'To Do': ['TO DO', 'To Do', 'Backlog', 'Open', 'New', 'Product Backlog'],
+            'In Progress': ['IN PROGRESS', 'In Progress', 'Development', 'Implementing', 'Dev', 'Coding'],
+            'Code Review': ['IN REVIEW', 'In Review', 'Code Review', 'Review', 'Reviewing', 'PR Review', 'Ready for Review'],
+            'QA': ['IN QA', 'In QA', 'QA', 'Testing', 'Validation', 'Test'],
+            'Done': ['DONE', 'Done', 'Closed', 'Resolved', 'Completed', 'Fixed']
         }
+
+        # Helper function to exclude weekends if needed
+        def calculate_working_hours(start_time, end_time):
+            """Calculate working hours between two datetime objects, optionally excluding weekends"""
+            if not exclude_weekends:
+                # Simple calculation if we don't need to exclude weekends
+                return (end_time - start_time).total_seconds() / 3600
+                
+            # More efficient calculation to exclude weekends
+            total_seconds = 0
+            
+            # Calculate whole days first
+            current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = end_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Add partial day at the beginning
+            if start_time.weekday() < 5:  # Weekday (0-4 is Monday to Friday)
+                # Add hours from start time until end of day
+                seconds_in_first_day = (current_date + timedelta(days=1) - start_time).total_seconds()
+                total_seconds += seconds_in_first_day
+            
+            # Add whole days in between
+            current_date += timedelta(days=1)
+            while current_date < end_date:
+                if current_date.weekday() < 5:  # Weekday
+                    total_seconds += 24 * 3600  # Add full day in seconds
+                current_date += timedelta(days=1)
+            
+            # Add partial day at the end
+            if end_time.weekday() < 5:  # Weekday
+                # Add hours from start of day until end time
+                seconds_in_last_day = (end_time - end_date).total_seconds()
+                total_seconds += seconds_in_last_day
+            
+            return total_seconds / 3600
         
-        # Define the cycle times using exact status names
-        cycle_times = {
-            'Development': {'total_hours': 0, 'count': 0, 'description': 'Time from TO DO to IN PROGRESS'},
-            'Review': {'total_hours': 0, 'count': 0, 'description': 'Time from IN PROGRESS to IN REVIEW'},
-            'QA': {'total_hours': 0, 'count': 0, 'description': 'Time from IN REVIEW to IN QA'},
-            'Completion': {'total_hours': 0, 'count': 0, 'description': 'Time from IN QA to DONE'},
-            'Total': {'total_hours': 0, 'count': 0, 'description': 'Total time from TO DO to DONE'}
-        }
+        # Track all status names encountered
+        all_status_names = set()
+        status_stage_map = {}  # Maps actual status names to our stages
+
+        # Track time spent in each stage by each issue
+        stage_data = {stage: {
+            'durations': [],                   # All periods in this stage
+            'open_durations': [],              # Currently open periods
+            'closed_durations': [],            # Closed periods
+            'tickets': set(),                  # Unique tickets that entered this stage
+            'open_tickets': set(),             # Tickets currently in this stage
+            'closed_tickets': set(),           # Tickets that were in this stage but have moved on
+            'total_hours': 0,                  # Total hours across all durations
+            'open_hours': 0,                   # Hours in currently open periods
+            'closed_hours': 0,                 # Hours in closed periods
+        } for stage in workflow_stages.keys()}
         
-        # Counters for overall metrics
-        total_issues = len(issues)
-        completed_issues = 0
-        in_progress_issues = 0
+        # Track current status distribution 
+        current_status_counts = {stage: 0 for stage in workflow_stages.keys()}
+        current_status_counts['Other'] = 0
         
-        # Track active tickets in each stage
-        current_status_counts = {
-            'to_do': 0,
-            'in_progress': 0,
-            'in_review': 0,
-            'in_qa': 0,
-            'done': 0,
-            'other': 0
-        }
-        
-        # Track tickets with partial transitions
-        partial_transitions = {
-            'Development': 0,
-            'Review': 0,
-            'QA': 0,
-            'Completion': 0
-        }
-        
-        # Track ping-pong transitions (back and forth between states)
-        ping_pong_metrics = {
-            'total_ping_pongs': 0,                    # Total number of backward transitions
-            'tickets_with_ping_pongs': 0,             # Number of tickets with any backward transitions
-            'ping_pong_details': {                    # Counts of different types of backward transitions
+        # Track churn metrics
+        churn_metrics = {
+            'total_churn': 0,                   # Total number of backward transitions
+            'tickets_with_churn': 0,            # Number of tickets with any backward transitions
+            'churn_details': {                  # Counts of different types of backward transitions
                 'in_progress_to_to_do': 0,
                 'in_review_to_in_progress': 0,
                 'in_qa_to_in_review': 0,
                 'in_qa_to_in_progress': 0,
                 'done_to_any': 0
             },
-            'tickets_by_score': {                    # Tickets grouped by ping-pong score range
+            'tickets_by_score': {               # Tickets grouped by churn score range
                 '1-5': 0,
                 '6-10': 0,
                 '11-20': 0,
                 '21+': 0
             },
-            'tickets_with_scores': {}                # Dictionary of ticket keys to their ping-pong scores
+            'tickets_with_scores': {}           # Dictionary of ticket keys to their churn scores
         }
         
-        # Track all status names encountered
-        all_status_names = set()
-        status_category_map = {}  # Maps actual status names to our categories
-        
-        # Analyze each issue to calculate cycle times
+        # Keep track of workflow stage order for churn detection
+        workflow_order = {
+            'To Do': 1,
+            'In Progress': 2,
+            'Code Review': 3,
+            'QA': 4,
+            'Done': 5
+        }
+
+        # Current timestamp for calculating open durations
+        now = datetime.now(timezone.utc)
+
+        # Analyze each issue
         for issue in issues:
             issue_key = issue.get('key')
             changelog = issue.get('changelog', {}).get('histories', [])
             created_date = issue.get('fields', {}).get('created')
             resolution_date = issue.get('fields', {}).get('resolutiondate')
-            status = issue.get('fields', {}).get('status', {}).get('name', 'Unknown')
+            current_status_name = issue.get('fields', {}).get('status', {}).get('name', 'Unknown')
             updated_date = issue.get('fields', {}).get('updated')
-            summary = issue.get('fields', {}).get('summary', 'No summary')
             
             # Track all status names
-            all_status_names.add(status)
+            all_status_names.add(current_status_name)
             
-            logger.debug(f"Analyzing issue {issue_key} ({summary}) with status {status}")
-            
-            # Check the current status category
-            current_status_category = 'other'
-            for category, status_list in status_categories.items():
-                # Try exact match first, then case-insensitive contains
-                if status in status_list:
-                    current_status_category = category
-                    status_category_map[status] = category
-                    logger.debug(f"Exact status match: '{status}' -> {category}")
+            # Find current workflow stage
+            current_stage = None
+            for stage, status_list in workflow_stages.items():
+                if current_status_name in status_list or any(s.lower() in current_status_name.lower() for s in status_list):
+                    current_stage = stage
+                    status_stage_map[current_status_name] = stage
                     break
-                elif any(s.lower() in status.lower() for s in status_list):
-                    current_status_category = category
-                    status_category_map[status] = category
-                    logger.debug(f"Fuzzy status match: '{status}' -> {category}")
-                    break
-                    
-            # Count current statuses
-            current_status_counts[current_status_category] += 1
-            logger.debug(f"Issue {issue_key} counted in category: {current_status_category}")
             
-            # Check if ticket is completed
-            is_done_status = current_status_category == 'done'
-            has_resolution = resolution_date is not None
+            # Update current status counts (only if recognized)
+            if current_stage:
+                current_status_counts[current_stage] += 1
+            else:
+                # Map uncategorized current statuses to 'Other'
+                if current_status_name not in status_stage_map:
+                   status_stage_map[current_status_name] = 'Other' 
+                current_status_counts['Other'] += 1
             
-            if is_done_status or has_resolution:
-                completed_issues += 1
-            elif current_status_category != 'to_do':
-                in_progress_issues += 1
-                
-            # If no resolution date but status is Done, use the updated date
-            if not resolution_date and is_done_status and updated_date:
-                resolution_date = updated_date
-                logger.debug(f"Issue {issue_key} has no resolution date but is in Done status, using updated date: {updated_date}")
-            
-            # Process status changes to track transitions - for ALL tickets
-            status_changes = []
-            
-            # Extract all status changes from changelog
+            # Process status changes to collect all transitions and calculate churn
+            all_issue_status_changes = [] # Store all status changes chronologically
+            status_transitions_for_churn = [] # Store stage transitions for churn calculation
+            issue_churn_count = 0
+
             for history in changelog:
+                history_date = history.get('created')
                 for item in history.get('items', []):
                     if item.get('field') == 'status':
-                        status_name = item.get('toString')
-                        from_status = item.get('fromString', 'Unknown')
-                        all_status_names.add(status_name)
-                        all_status_names.add(from_status)
-                        status_changes.append({
-                            'status': status_name,
-                            'date': history.get('created')
+                        from_status = item.get('fromString')
+                        to_status = item.get('toString')
+                        
+                        # Add to chronological list
+                        all_issue_status_changes.append({
+                            'date': history_date,
+                            'from': from_status,
+                            'to': to_status
                         })
+                        
+                        # Track the status names
+                        all_status_names.add(from_status)
+                        all_status_names.add(to_status)
+                        
+                        # Map statuses to workflow stages for churn detection
+                        from_stage = status_stage_map.get(from_status)
+                        to_stage = status_stage_map.get(to_status)
+                        
+                        if not from_stage:
+                           for stage, status_list in workflow_stages.items():
+                               if from_status in status_list or any(s.lower() in from_status.lower() for s in status_list):
+                                   from_stage = stage
+                                   status_stage_map[from_status] = stage
+                                   break
+                           if not from_stage: # Still not found
+                               from_stage = 'Other'
+                               status_stage_map[from_status] = 'Other'
+
+                        if not to_stage:
+                           for stage, status_list in workflow_stages.items():
+                               if to_status in status_list or any(s.lower() in to_status.lower() for s in status_list):
+                                   to_stage = stage
+                                   status_stage_map[to_status] = stage
+                                   break
+                           if not to_stage: # Still not found
+                               to_stage = 'Other'
+                               status_stage_map[to_status] = 'Other'
+
+                        # Add to churn transition list
+                        status_transitions_for_churn.append({
+                            'from_stage': from_stage,
+                            'to_stage': to_stage,
+                            'date': history_date
+                        })
+                            
+                        # Detect churn (backward workflow transitions, ignoring 'Other' and same-stage)
+                        if from_stage != to_stage and from_stage != 'Other' and to_stage != 'Other' and workflow_order.get(to_stage, 0) < workflow_order.get(from_stage, 0):
+                            issue_churn_count += 1 
+                            # This is a backward transition (churn)
+                            if from_stage == 'In Progress' and to_stage == 'To Do':
+                                churn_metrics['churn_details']['in_progress_to_to_do'] += 1
+                            elif from_stage == 'Code Review' and to_stage == 'In Progress':
+                                churn_metrics['churn_details']['in_review_to_in_progress'] += 1
+                            elif from_stage == 'QA' and to_stage == 'Code Review':
+                                churn_metrics['churn_details']['in_qa_to_in_review'] += 1
+                            elif from_stage == 'QA' and to_stage == 'In Progress':
+                                churn_metrics['churn_details']['in_qa_to_in_progress'] += 1
+                            elif from_stage == 'Done':
+                                churn_metrics['churn_details']['done_to_any'] += 1
             
-            # If we have status changes, the first entry in changelog provides the initial status
-            initial_status_found = False
-            if changelog and len(changelog) > 0:
-                for item in changelog[0].get('items', []):
-                    if item.get('field') == 'status':
-                        initial_status = item.get('fromString')
-                        if initial_status and created_date:
-                            status_changes.append({
-                                'status': initial_status,
-                                'date': created_date
-                            })
-                            initial_status_found = True
-                            logger.debug(f"Found initial status for {issue_key}: {initial_status}")
-                            break
+            # Sort all status changes by date
+            all_issue_status_changes.sort(key=lambda x: x['date'])
+
+            # Reconstruct the stage history for calculating durations
+            status_history = []
             
-            # If we couldn't find the initial status from changelog, use the current status
-            # (but only if this is the only status we know about)
-            if not initial_status_found and not status_changes and created_date:
-                logger.debug(f"No status history found for {issue_key}, using current status as initial: {current_status}")
-                status_changes.append({
-                    'status': current_status,
+            # Determine initial status and stage
+            initial_status = None
+            initial_stage = None
+
+            if not all_issue_status_changes:
+                # No status changes recorded, use the current status as the initial one
+                initial_status = current_status_name
+                initial_stage = status_stage_map.get(initial_status, 'Other')
+                logger.debug(f"Issue {issue_key} has no status changes in changelog. Using current status '{initial_status}' ({initial_stage}) as initial.")
+            else:
+                # Use the 'from' status of the first recorded change
+                initial_status = all_issue_status_changes[0].get('from')
+                if initial_status:
+                    initial_stage = status_stage_map.get(initial_status)
+                    if not initial_stage: # Map if not already mapped
+                       for stage, status_list in workflow_stages.items():
+                           if initial_status in status_list or any(s.lower() in initial_status.lower() for s in status_list):
+                               initial_stage = stage
+                               status_stage_map[initial_status] = stage
+                               break
+                       if not initial_stage: # Still not found
+                           initial_stage = 'Other'
+                           status_stage_map[initial_status] = 'Other'
+                    logger.debug(f"Determined initial status for {issue_key} as '{initial_status}' ({initial_stage}) from first changelog entry.")
+                else:
+                    # Fallback if first 'from' is None (should be rare)
+                    initial_status = "Unknown Initial"
+                    initial_stage = "Other"
+                    logger.warning(f"Could not determine initial status for {issue_key} from first changelog entry (from=None). Defaulting to 'Unknown Initial'.")
+
+            # Add the initial state at creation time
+            if created_date and initial_stage:
+                status_history.append({
+                    'stage': initial_stage,
+                    'status': initial_status,
                     'date': created_date
                 })
-            
-            # Add resolution as final status change if not already in changelog
-            done_status = "DONE"  # Use exact done status name
-            if resolution_date:
-                if not status_changes or status_changes[-1]['date'] != resolution_date:
-                    status_changes.append({
-                        'status': done_status,
-                        'date': resolution_date
+            elif not created_date:
+                 logger.warning(f"Issue {issue_key} missing creation date. Cannot accurately track time.")
+                 continue # Skip issues without creation date
+
+
+            # Add all subsequent states from the sorted changes
+            for change in all_issue_status_changes:
+                to_status = change.get('to')
+                to_stage = status_stage_map.get(to_status) # Should be mapped already
+                
+                if not to_stage: # Should not happen if mapping logic above is correct, but handle defensively
+                    logger.warning(f"Status '{to_status}' for issue {issue_key} was not mapped to a stage earlier. Mapping to 'Other'.")
+                    to_stage = 'Other'
+                    status_stage_map[to_status] = 'Other'
+                
+                if to_stage: # Only add if we have a stage
+                    status_history.append({
+                        'stage': to_stage,
+                        'status': to_status,
+                        'date': change.get('date')
                     })
-            
-            # Sort status changes by date
-            status_changes.sort(key=lambda x: x['date'])
-            
-            logger.debug(f"Status changes for {issue_key}: {len(status_changes)} changes")
-            
-            # Calculate duration in each status
-            status_durations = {}
-            
-            for i in range(len(status_changes)):
-                # Current change
-                change = status_changes[i]
-                status = change['status']
+
+            # --- The rest of the loop calculates durations based on status_history ---
+            # Sort status history by date (redundant if built correctly, but safe)
+            # status_history.sort(key=lambda x: x['date']) # Sorting done above
+
+            # Calculate time spent in each stage
+            if len(status_history) > 0: # Check if we have at least the initial state
+                # Track which stages this issue passed through
+                stages_visited = set()
                 
-                # Start time is this change
-                start_time = datetime.fromisoformat(change['date'].replace('Z', '+00:00'))
-                
-                # End time is next change or current time
-                if i < len(status_changes) - 1:
-                    # Next status change
-                    next_change = status_changes[i + 1]
-                    end_time = datetime.fromisoformat(next_change['date'].replace('Z', '+00:00'))
-                else:
-                    # Current time if this is the latest status
-                    end_time = datetime.now(timezone.utc)
-                
-                # Calculate duration in seconds
-                duration_seconds = (end_time - start_time).total_seconds()
-                
-                # Convert to hours for easier reading
-                duration_hours = duration_seconds / 3600
-                
-                # Add to status durations
-                if status in status_durations:
-                    status_durations[status] += duration_hours
-                else:
-                    status_durations[status] = duration_hours
-            
-            # Find first occurrence of each status category
-            first_occurrence = {}
-            
-            # Track status category sequence for ping-pong detection
-            status_category_sequence = []
-            previous_category = None
-            ticket_ping_pong_score = 0     # Per-ticket ping-pong score
-            ticket_ping_pongs = {          # Count of each type of ping-pong for this ticket
-                'in_progress_to_to_do': 0,
-                'in_review_to_in_progress': 0,
-                'in_qa_to_in_review': 0,
-                'in_qa_to_in_progress': 0,
-                'done_to_any': 0
-            }
-            ticket_transitions = []        # List of all status transitions for this ticket
-            
-            for i, change in enumerate(status_changes):
-                status = change['status']
-                date = change['date']
-                
-                # Categorize the status - try exact match first, then fuzzy match
-                matched = False
-                current_category = None
-                
-                for category, status_list in status_categories.items():
-                    if status in status_list:
-                        if category not in first_occurrence:
-                            first_occurrence[category] = date
-                            logger.debug(f"First occurrence of {category} at {date} (exact match: {status})")
-                        status_category_map[status] = category
-                        current_category = category
-                        matched = True
-                        break
-                
-                # If no exact match, try fuzzy match
-                if not matched:
-                    for category, status_list in status_categories.items():
-                        if any(s.lower() in status.lower() for s in status_list):
-                            if category not in first_occurrence:
-                                first_occurrence[category] = date
-                                logger.debug(f"First occurrence of {category} at {date} (fuzzy match: {status})")
-                            status_category_map[status] = category
-                            current_category = category
-                            break
-                
-                # If we couldn't categorize the status, continue to the next change
-                if current_category is None:
-                    continue
+                for i in range(len(status_history)):
+                    # Current status/stage entry
+                    entry = status_history[i]
+                    stage = entry['stage']
                     
-                # Add to sequence and detect ping-pongs
-                if previous_category is not None and current_category != previous_category:
-                    # Record the transition
-                    ticket_transitions.append({
-                        'from': previous_category,
-                        'to': current_category,
-                        'date': date
-                    })
+                    # Skip 'Other' stage for duration calculations
+                    if stage == 'Other':
+                        logger.debug(f"Skipping duration calculation for 'Other' stage period in {issue_key}")
+                        continue 
+                        
+                    stages_visited.add(stage)
                     
-                    # Check if this is a backward transition (ping-pong)
-                    # Skip the first status change since we want to ignore initial status
-                    if i > 0:
-                        if current_category == 'to_do' and previous_category == 'in_progress':
-                            # Back to backlog from development
-                            ping_pong_metrics['ping_pong_details']['in_progress_to_to_do'] += 1
-                            ticket_ping_pongs['in_progress_to_to_do'] += 1
-                            ticket_ping_pong_score += 1  # Simple count instead of weight
-                            logger.debug(f"Issue {issue_key}: Ping-pong detected - returned to backlog from development")
-                            
-                        elif current_category == 'in_progress' and previous_category == 'in_review':
-                            # Back to development from review
-                            ping_pong_metrics['ping_pong_details']['in_review_to_in_progress'] += 1
-                            ticket_ping_pongs['in_review_to_in_progress'] += 1
-                            ticket_ping_pong_score += 1  # Simple count instead of weight
-                            logger.debug(f"Issue {issue_key}: Ping-pong detected - returned to development from review")
-                            
-                        elif current_category == 'in_review' and previous_category == 'in_qa':
-                            # Failed QA, back to review
-                            ping_pong_metrics['ping_pong_details']['in_qa_to_in_review'] += 1
-                            ticket_ping_pongs['in_qa_to_in_review'] += 1
-                            ticket_ping_pong_score += 1  # Simple count instead of weight
-                            logger.debug(f"Issue {issue_key}: Ping-pong detected - failed QA, returned to review")
-                            
-                        elif current_category == 'in_progress' and previous_category == 'in_qa':
-                            # Failed QA badly, back to development
-                            ping_pong_metrics['ping_pong_details']['in_qa_to_in_progress'] += 1
-                            ticket_ping_pongs['in_qa_to_in_progress'] += 1
-                            ticket_ping_pong_score += 1  # Simple count instead of weight
-                            logger.debug(f"Issue {issue_key}: Ping-pong detected - failed QA, returned to development")
-                            
-                        elif previous_category == 'done':
-                            # Reopened ticket
-                            ping_pong_metrics['ping_pong_details']['done_to_any'] += 1
-                            ticket_ping_pongs['done_to_any'] += 1
-                            ticket_ping_pong_score += 1  # Simple count instead of weight
-                            logger.debug(f"Issue {issue_key}: Ping-pong detected - reopened ticket from done state")
-                
-                # Update previous category for next iteration
-                previous_category = current_category
-            
-            # Save the ticket's ping-pong score
-            if ticket_ping_pong_score > 0:
-                ping_pong_metrics['tickets_with_ping_pongs'] += 1
-                ping_pong_metrics['total_ping_pongs'] += sum(ticket_ping_pongs.values())
-                ping_pong_metrics['tickets_with_scores'][issue_key] = {
-                    'score': ticket_ping_pong_score,
-                    'ping_pongs': ticket_ping_pongs,
-                    'transitions': ticket_transitions
-                }
-                
-                # Count ticket in the appropriate score range bucket
-                if ticket_ping_pong_score <= 5:
-                    ping_pong_metrics['tickets_by_score']['1-5'] += 1
-                elif ticket_ping_pong_score <= 10:
-                    ping_pong_metrics['tickets_by_score']['6-10'] += 1
-                elif ticket_ping_pong_score <= 20:
-                    ping_pong_metrics['tickets_by_score']['11-20'] += 1
-                else:
-                    ping_pong_metrics['tickets_by_score']['21+'] += 1
-                
-                logger.debug(f"Issue {issue_key} had ping-pongs, incrementing ticket count")
-                logger.debug(f"Issue {issue_key} ping-pong score: {ticket_ping_pong_score}")
-            
-            # Calculate cycle times between key transitions for completed tickets
-            if is_done_status or has_resolution:
-                # Calculate total time from first TO DO to DONE (not from creation)
-                if 'to_do' in first_occurrence and 'done' in first_occurrence:
-                    start_time = datetime.fromisoformat(first_occurrence['to_do'].replace('Z', '+00:00'))
-                    end_time = datetime.fromisoformat(first_occurrence['done'].replace('Z', '+00:00'))
-                    total_hours = (end_time - start_time).total_seconds() / 3600
+                    # Start time is this entry's date
+                    start_time_str = entry['date']
+                    if not start_time_str: # Skip if date is missing
+                        logger.warning(f"Missing date for history entry in {issue_key}. Skipping duration calculation for this period.")
+                        continue
+                    start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
                     
-                    # Only count positive time differences
-                    if end_time > start_time:
-                        cycle_times['Total']['total_hours'] += total_hours
-                        cycle_times['Total']['count'] += 1
-                        logger.debug(f"Issue {issue_key}: Total cycle time (To Do → Done): {total_hours:.2f} hours")
+                    # End time is next entry's date or current time
+                    end_time_str = None
+                    is_open = False
+                    if i < len(status_history) - 1:
+                        # Next status entry
+                        next_entry = status_history[i + 1]
+                        end_time_str = next_entry['date']
                     else:
-                        logger.warning(f"Issue {issue_key}: Negative duration for Total cycle (To Do → Done)")
-            
-            # Track transitions for all tickets (both completed and in-progress)
-            transitions = [
-                ('to_do', 'in_progress', 'Development'),
-                ('in_progress', 'in_review', 'Review'),
-                ('in_review', 'in_qa', 'QA'),
-                ('in_qa', 'done', 'Completion')
-            ]
-            
-            for start_cat, end_cat, cycle_name in transitions:
-                # Count partial transitions for in-progress tickets
-                if start_cat in first_occurrence and not (is_done_status or has_resolution):
-                    # If ticket has started this transition but not completed it
-                    if end_cat not in first_occurrence and current_status_category == start_cat:
-                        partial_transitions[cycle_name] += 1
-                        logger.debug(f"Issue {issue_key} counted as partial transition for {cycle_name} (in {start_cat}, waiting for {end_cat})")
-                
-                # Calculate completed transition times
-                if start_cat in first_occurrence and end_cat in first_occurrence:
-                    start_time = datetime.fromisoformat(first_occurrence[start_cat].replace('Z', '+00:00'))
-                    end_time = datetime.fromisoformat(first_occurrence[end_cat].replace('Z', '+00:00'))
+                        # Current time if this is the latest status
+                        end_time = now
+                        is_open = True
                     
-                    # Only count positive time differences
-                    if end_time > start_time:
-                        duration_hours = (end_time - start_time).total_seconds() / 3600
-                        cycle_times[cycle_name]['total_hours'] += duration_hours
-                        cycle_times[cycle_name]['count'] += 1
-                        logger.debug(f"Issue {issue_key}: Added {duration_hours:.2f} hours to '{cycle_name}' cycle (from {start_cat} to {end_cat})")
+                    # Parse end time string if it's not the current time
+                    if end_time_str:
+                         if not end_time_str: # Skip if date is missing
+                             logger.warning(f"Missing date for next history entry in {issue_key}. Skipping duration calculation.")
+                             continue
+                         end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+
+                    # Ensure start_time and end_time are valid
+                    if not start_time or not end_time:
+                         logger.warning(f"Invalid start or end time for period in {issue_key}. Skipping calculation.")
+                         continue
+                         
+                    # Ensure end_time is after start_time
+                    if end_time < start_time:
+                        logger.warning(f"End time {end_time} is before start time {start_time} for stage '{stage}' in {issue_key}. Skipping duration calculation for this invalid period.")
+                        continue # Skip this invalid period
+
+                    # Calculate duration in hours, potentially excluding weekends
+                    duration_hours = calculate_working_hours(start_time, end_time)
+                    
+                    # Only record if duration is positive and meets minimum threshold
+                    if duration_hours >= min_time_threshold:
+                        # This issue was in this stage
+                        stage_data[stage]['tickets'].add(issue_key)
+                        
+                        duration_entry = {
+                            'issue_key': issue_key,
+                            'duration_hours': duration_hours,
+                            'start_time': start_time.isoformat(),
+                            'end_time': end_time.isoformat(),
+                            'is_open': is_open
+                        }
+
+                        # Track open vs closed periods
+                        if is_open:
+                            stage_data[stage]['open_tickets'].add(issue_key)
+                            stage_data[stage]['open_durations'].append(duration_entry)
+                            stage_data[stage]['open_hours'] += duration_hours
+                        else:
+                            stage_data[stage]['closed_tickets'].add(issue_key)
+                            stage_data[stage]['closed_durations'].append(duration_entry)
+                            stage_data[stage]['closed_hours'] += duration_hours
+                        
+                        # Add to all durations
+                        stage_data[stage]['durations'].append(duration_entry)
+                        stage_data[stage]['total_hours'] += duration_hours
+                
+                # Update churn count based on the calculated issue_churn_count
+                if issue_churn_count > 0:
+                    churn_metrics['tickets_with_churn'] += 1
+                    churn_metrics['total_churn'] += issue_churn_count
+                    
+                    # Track churn score
+                    churn_metrics['tickets_with_scores'][issue_key] = {
+                        'score': issue_churn_count,
+                        'transitions': status_transitions_for_churn # Ensure this list is included
+                    }
+                    
+                    # Count ticket in the appropriate score range bucket
+                    if issue_churn_count <= 5:
+                        churn_metrics['tickets_by_score']['1-5'] += 1
+                    elif issue_churn_count <= 10:
+                        churn_metrics['tickets_by_score']['6-10'] += 1
+                    elif issue_churn_count <= 20:
+                        churn_metrics['tickets_by_score']['11-20'] += 1
                     else:
-                        logger.warning(f"Issue {issue_key}: Negative or zero duration for {cycle_name} cycle (from {start_cat} at {first_occurrence[start_cat]} to {end_cat} at {first_occurrence[end_cat]})")
+                        churn_metrics['tickets_by_score']['21+'] += 1
+            else: # No valid status history could be built
+                logger.warning(f"Could not build valid status history for {issue_key}. Skipping duration calculations.")
+
         
-        # Build a mapping of statuses found but not categorized
-        uncategorized_statuses = [status for status in all_status_names if status not in status_category_map]
+        # Build a mapping of statuses found but not categorized (excluding 'Other')
+        uncategorized_statuses = [status for status, stage in status_stage_map.items() if stage == 'Other' and status != 'Unknown Initial']
         
         # Log all workflow steps found
         logger.info(f"All status names found: {sorted(list(all_status_names))}")
-        logger.info(f"Status category mapping: {status_category_map}")
-        logger.info(f"Uncategorized statuses: {uncategorized_statuses}")
+        logger.info(f"Final Status stage mapping: {status_stage_map}")
+        logger.info(f"Uncategorized statuses mapped to 'Other': {uncategorized_statuses}")
         
-        # Calculate averages
+        # Calculate metrics for each stage (excluding 'Other')
+        stage_metrics = {}
+        for stage, data in stage_data.items():
+            if stage == 'Other': continue # Skip 'Other' stage in final metrics
+
+            # Calculate metrics
+            metrics = {
+                # Tickets
+                'tickets_count': len(data['tickets']),
+                'open_tickets_count': len(data['open_tickets']),
+                'closed_tickets_count': len(data['closed_tickets']),
+                
+                # Hours
+                'total_hours': round(data['total_hours'], 2),
+                'open_hours': round(data['open_hours'], 2),
+                'closed_hours': round(data['closed_hours'], 2),
+                
+                # Averages
+                'avg_per_ticket': round(data['total_hours'] / len(data['tickets']), 2) if data['tickets'] else 0,
+                'avg_per_closed_ticket': round(data['closed_hours'] / len(data['closed_tickets']), 2) if data['closed_tickets'] else 0,
+                'avg_per_open_ticket': round(data['open_hours'] / len(data['open_tickets']), 2) if data['open_tickets'] else 0,
+                
+                # Occurrences
+                'count': len(data['durations']),
+                'average_hours': round(data['total_hours'] / len(data['durations']), 2) if data['durations'] else 0,
+                
+                # Include complete data counts
+                'durations_count': len(data['durations']),
+                'open_durations_count': len(data['open_durations']),
+                'closed_durations_count': len(data['closed_durations'])
+            }
+            
+            stage_metrics[stage] = metrics
+        
+        # Build the complete metrics object
         metrics = {
-            'total_issues': total_issues,
-            'completed_issues': completed_issues,
-            'in_progress_issues': in_progress_issues,
+            'total_issues': len(issues),
             'current_status': current_status_counts,
-            'partial_transitions': partial_transitions,
-            'cycle_times': {},
+            'stage_metrics': stage_metrics,
+            'calculation_params': {
+                'exclude_weekends': exclude_weekends,
+                'min_time_threshold': min_time_threshold
+            },
             'workflow_info': {
                 'all_statuses': sorted(list(all_status_names)),
                 'uncategorized_statuses': uncategorized_statuses,
-                'status_mapping': status_category_map
+                'status_mapping': status_stage_map
             },
-            'ping_pong_metrics': ping_pong_metrics
+            'churn_metrics': churn_metrics
         }
         
-        for cycle, data in cycle_times.items():
-            if data['count'] > 0:
-                avg_hours = data['total_hours'] / data['count']
-                metrics['cycle_times'][cycle] = {
-                    'average_hours': round(avg_hours, 2),
-                    'count': data['count'],
-                    'total_hours': round(data['total_hours'], 2),
-                    'description': data['description']
-                }
-            else:
-                metrics['cycle_times'][cycle] = {
-                    'average_hours': 0,
-                    'count': 0,
-                    'total_hours': 0,
-                    'description': data['description']
-                }
-                
         logger.debug(f"Calculated cycle time metrics: {metrics}")
+        logger.info(f"Stage metrics data structure: {stage_metrics}")
+        # Log a sample of the data to check structure
+        if stage_metrics:
+            sample_stage = next(iter(stage_metrics))
+            logger.info(f"Sample stage '{sample_stage}' data: {stage_metrics[sample_stage]}")
         
         return jsonify(metrics), 200
         

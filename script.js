@@ -3,8 +3,9 @@ class JiraMetrics {
         this.jiraUrl = '';
         this.proxyUrl = 'http://localhost:5000';
         this.proxyEndpoint = '/proxy';
-        this.selectedBoard = '';
-        this.selectedSprint = '';
+        this.selectedBoardId = '';
+        this.selectedSprintId = '';
+        this.storyPointFieldId = null; // Add this property
         this.sprints = [];
         this.issues = [];
         this.issueData = {}; // Store supplementary issue data like status durations
@@ -22,13 +23,13 @@ class JiraMetrics {
             'Ready for Review': 72 // Hours (3 days)
         };
         this.showingAtRiskOnly = false;
-        this.showingPingPongOnly = false;
-        this.pingPongThreshold = 3; // Minimum number of status changes to consider for ping-pong
+        this.showingChurnOnly = false;
+        this.churnThreshold = 3; // Minimum number of status changes to consider for ticket churn
         this.filters = {
             highRisk: false,
             stalled: false,
             blocking: false,
-            pingPong: false
+            churn: false
         };
         this.initializeEventListeners();
         
@@ -43,79 +44,63 @@ class JiraMetrics {
     }
 
     initializeEventListeners() {
+        // Set up event listeners for the UI controls
+        
+        // Connect/refresh button
         document.getElementById('connectBtn').addEventListener('click', () => {
-            console.log("Connect button clicked - refreshing data");
             this.fetchJiraData();
         });
         
-        // Add event listener for board selection to load sprints
-        const boardSelect = document.getElementById('boardSelect');
-        if (boardSelect) {
-            boardSelect.addEventListener('change', () => {
-                this.selectedBoard = boardSelect.value;
-                console.log('Selected board:', this.selectedBoard);
-                
-                // Load sprints for the selected board
-                if (this.selectedBoard) {
-                    this.fetchSprintsForBoard(this.selectedBoard);
-                } else {
-                    // Clear sprints when no board is selected
-                    this.populateSprintDropdown([]);
-                }
-            });
-        }
+        // Ticket refresh button
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            this.fetchJiraData();
+        });
         
-        // Add event listener for the refresh button
-        const refreshBtn = document.getElementById('refreshBtn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => {
-                const boardSelect = document.getElementById('boardSelect');
-                if (boardSelect) {
-                    this.selectedBoard = boardSelect.value;
-                    console.log('Selected board:', this.selectedBoard);
-                }
-                
-                const sprintSelect = document.getElementById('sprintSelect');
-                if (sprintSelect) {
-                    this.selectedSprint = sprintSelect.value;
-                    console.log('Selected sprint:', this.selectedSprint);
-                }
-                
-                console.log("Refresh button clicked - will load tickets with author and assignee data");
-                this.fetchJiraData();
-            });
-        }
+        // Board selection change
+        document.getElementById('boardSelect').addEventListener('change', async (e) => {
+            // Store the selected board
+            this.selectedBoardId = e.target.value;
+            
+            // If a board is selected, fetch its sprints
+            if (this.selectedBoardId) {
+                await this.fetchSprintsForBoard(this.selectedBoardId);
+            } else {
+                // If no board selected, clear the sprint dropdown
+                this.populateSprintDropdown([]);
+            }
+        });
         
-        // Add event listener for at-risk only checkbox
-        const atRiskOnlyCheckbox = document.getElementById('atRiskOnlyCheckbox');
-        if (atRiskOnlyCheckbox) {
-            atRiskOnlyCheckbox.addEventListener('change', () => {
-                this.showingAtRiskOnly = atRiskOnlyCheckbox.checked;
-                console.log('Show only aging tickets:', this.showingAtRiskOnly);
-                
-                // Update the table without re-fetching data
-                this.updateDisplayedTickets();
-            });
-        }
+        // Sprint selection change
+        document.getElementById('sprintSelect').addEventListener('change', (e) => {
+            this.selectedSprintId = e.target.value;
+        });
         
-        // Add event listener for ping-pong only checkbox
-        const pingPongOnlyCheckbox = document.getElementById('pingPongOnlyCheckbox');
-        if (pingPongOnlyCheckbox) {
-            pingPongOnlyCheckbox.addEventListener('change', () => {
-                this.showingPingPongOnly = pingPongOnlyCheckbox.checked;
-                console.log('Show only ping-pong tickets:', this.showingPingPongOnly);
-                
-                // Update the table without re-fetching data
-                this.updateDisplayedTickets();
-            });
-        }
+        // Refresh metrics button
+        document.getElementById('refresh-metrics').addEventListener('click', () => {
+            this.fetchResolutionMetrics();
+        });
         
-        // Add event listeners for table header sorting
-        document.querySelectorAll('th[data-sort]').forEach(header => {
+        // Table headers for sorting
+        const tableHeaders = document.querySelectorAll('th[data-sort]');
+        tableHeaders.forEach(header => {
             header.addEventListener('click', () => {
-                const column = header.dataset.sort;
+                const column = header.getAttribute('data-sort');
                 this.sortTickets(column);
             });
+        });
+        
+        // Modal close button
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            document.getElementById('statusModal').style.display = 'none';
+        });
+        
+        // Filter checkboxes
+        document.getElementById('atRiskOnlyCheckbox').addEventListener('change', () => {
+            this.updateDisplayedTickets();
+        });
+        
+        document.getElementById('pingPongOnlyCheckbox').addEventListener('change', () => {
+            this.updateDisplayedTickets();
         });
     }
 
@@ -164,10 +149,18 @@ class JiraMetrics {
     async fetchSprintsForBoard(board) {
         try {
             const sprintSelect = document.getElementById('sprintSelect');
+            const boardSelect = document.getElementById('boardSelect');
+            
             if (sprintSelect) {
                 // Show loading state
                 this.populateSprintDropdown([{ id: '', name: 'Loading sprints...' }]);
                 sprintSelect.disabled = true;
+            }
+            
+            if (boardSelect) {
+                // Show loading indicator on the board dropdown
+                boardSelect.style.cursor = 'wait';
+                boardSelect.disabled = true;
             }
             
             const response = await fetch(`${this.proxyUrl}/proxy/board-sprints?board=${encodeURIComponent(board)}`);
@@ -207,135 +200,86 @@ class JiraMetrics {
             const boardsWithSprints = data.boardsWithSprints || 0;
             console.log(`Loaded ${this.sprints.length} sprints for board ${board} (checked ${boardsChecked} boards, found sprints in ${boardsWithSprints})`);
             
-            // Populate sprint dropdown with any message returned from the server
-            this.populateSprintDropdown(this.sprints, data.message);
-            
-            // Select the most recent sprint by default, only if we have sprints
-            if (this.sprints.length > 0) {
-                try {
-                    this.selectedSprint = this.sprints[0].id.toString();
-                    
-                    if (sprintSelect && this.selectedSprint) {
-                        sprintSelect.value = this.selectedSprint;
-                        console.log('Auto-selected most recent sprint:', this.sprints[0].name);
-                    }
-                } catch (error) {
-                    console.error('Error selecting default sprint:', error);
+            // Preselect the first active sprint if available
+            const activeSprintIndex = this.sprints.findIndex(s => s.state === 'active');
+            if (activeSprintIndex >= 0) {
+                console.log(`Preselecting active sprint: ${this.sprints[activeSprintIndex].name}`);
+                this.selectedSprintId = this.sprints[activeSprintIndex].id.toString();
+                
+                if (sprintSelect && this.selectedSprintId) {
+                    sprintSelect.value = this.selectedSprintId;
                 }
             }
             
-            if (sprintSelect) {
-                sprintSelect.disabled = false;
-            }
+            // Populate the sprint dropdown with the fetched sprints
+            const message = this.sprints.length === 0 
+                ? 'No sprints found for this board'
+                : null;
+                
+            this.populateSprintDropdown(this.sprints, message);
+            
         } catch (error) {
             console.error('Error fetching sprints:', error);
-            this.showError(`Failed to load sprints: ${error.message}`);
-            
-            // Reset sprint dropdown with error message
-            this.populateSprintDropdown([{ id: '', name: `Error: ${error.message}` }]);
-            
-            if (sprintSelect) {
-                sprintSelect.disabled = false;
-            }
+            this.populateSprintDropdown([], `Error: ${error.message}`);
         }
     }
     
     populateSprintDropdown(sprints, message = null) {
         const sprintSelect = document.getElementById('sprintSelect');
-        if (!sprintSelect) return;
+        const boardSelect = document.getElementById('boardSelect');
         
-        // Clear current options
-        sprintSelect.innerHTML = '';
-        
-        // Add "All Sprints" option
-        const allOption = document.createElement('option');
-        allOption.value = '';
-        allOption.textContent = 'All Sprints';
-        sprintSelect.appendChild(allOption);
-        
-        // If we have a message but no sprints, show the message in the dropdown
-        if (message && (!sprints || sprints.length === 0)) {
-            allOption.textContent = message;
-            // Add a help text under the dropdown
-            const helpText = document.createElement('div');
-            helpText.style.color = '#666';
-            helpText.style.fontSize = '12px';
-            helpText.style.marginTop = '5px';
-            helpText.textContent = 'Note: Some boards may not use sprints or have no sprints configured.';
-            
-            const sprintContainer = sprintSelect.parentElement;
-            if (sprintContainer) {
-                // Remove any existing help text
-                const existingHelp = sprintContainer.querySelector('.sprint-help');
-                if (existingHelp) {
-                    existingHelp.remove();
-                }
-                
-                helpText.className = 'sprint-help';
-                sprintContainer.appendChild(helpText);
-            }
+        if (!sprintSelect) {
+            console.error('Sprint select element not found');
             return;
         }
         
-        // Ensure sprints is an array to avoid errors
-        const sprintsArray = Array.isArray(sprints) ? sprints : [];
+        // Re-enable sprint select
+        sprintSelect.disabled = false;
         
-        // Add sprints to dropdown
-        sprintsArray.forEach(sprint => {
-            if (!sprint || sprint.id === '') {
-                // For loading or error messages
-                allOption.textContent = sprint ? sprint.name : 'Error loading sprints';
-                return;
-            }
-            
-            try {
-                const option = document.createElement('option');
-                option.value = sprint.id ? sprint.id.toString() : '';
-                
-                // Format the sprint name with its state and board if available
-                let sprintName = sprint.name || 'Unnamed Sprint';
-                
-                // Add state
-                if (sprint.state === 'active') {
-                    sprintName += ' (Active)';
-                } else if (sprint.state === 'future') {
-                    sprintName += ' (Future)';
-                } else if (sprint.state === 'closed') {
-                    sprintName += ' (Closed)';
-                }
-                
-                // Add board name if there are multiple boards
-                if (sprint.boardName) {
-                    sprintName += ` [${sprint.boardName}]`;
-                }
-                
-                option.textContent = sprintName;
-                sprintSelect.appendChild(option);
-            } catch (error) {
-                console.error('Error adding sprint option:', error, sprint);
-            }
+        // Re-enable board select if it was disabled
+        if (boardSelect) {
+            boardSelect.disabled = false;
+            boardSelect.style.cursor = 'auto';
+        }
+        
+        // Clear existing options
+        sprintSelect.innerHTML = '';
+        
+        // Build new options
+        let options = [
+            '<option value="">All sprints</option>'
+        ];
+        
+        // Sort sprints by start date (newest first)
+        const sortedSprints = [...sprints].sort((a, b) => {
+            if (!a.startDate) return 1;
+            if (!b.startDate) return -1;
+            return new Date(b.startDate) - new Date(a.startDate);
         });
         
-        // If we have multiple boards with sprints, add a help text
-        if (sprintsArray.some(s => s && s.boardName)) {
-            const helpText = document.createElement('div');
-            helpText.style.color = '#666';
-            helpText.style.fontSize = '12px';
-            helpText.style.marginTop = '5px';
-            helpText.textContent = 'Note: This project has multiple boards with sprints.';
+        sortedSprints.forEach(sprint => {
+            let name = sprint.name || 'Unnamed Sprint';
+            let state = sprint.state ? ` (${sprint.state})` : '';
+            let boardInfo = sprint.boardName ? ` - ${sprint.boardName}` : '';
+            let selected = sprint.id && this.selectedSprintId === sprint.id.toString() ? 'selected' : '';
             
-            const sprintContainer = sprintSelect.parentElement;
-            if (sprintContainer) {
-                // Remove any existing help text
-                const existingHelp = sprintContainer.querySelector('.sprint-help');
-                if (existingHelp) {
-                    existingHelp.remove();
-                }
-                
-                helpText.className = 'sprint-help';
-                sprintContainer.appendChild(helpText);
-            }
+            options.push(`<option value="${sprint.id}" ${selected}>${name}${state}${boardInfo}</option>`);
+        });
+        
+        // Update the dropdown
+        sprintSelect.innerHTML = options.join('');
+        
+        // If a message was provided, show it as the first option
+        if (message) {
+            const messageOption = document.createElement('option');
+            messageOption.value = '';
+            messageOption.textContent = message;
+            messageOption.selected = true;
+            messageOption.disabled = true;
+            sprintSelect.prepend(messageOption);
         }
+        
+        this.sprints = sprints;
     }
 
     validateInputs() {
@@ -362,17 +306,45 @@ class JiraMetrics {
         }
 
         // Check if board is selected
-        if (!this.selectedBoard) {
+        if (!this.selectedBoardId) {
             this.showError('Please select a board first');
             this.showBoardSelectionMessage();
             return;
         }
         
+        // Show loading indicator
+        const refreshBtn = document.getElementById('refreshBtn');
+        const originalText = refreshBtn.textContent;
+        refreshBtn.innerHTML = '<span class="spinner"></span> Loading...';
+        refreshBtn.disabled = true;
+        
+        // Add spinner style if not already in the document
+        if (!document.getElementById('spinnerStyle')) {
+            const style = document.createElement('style');
+            style.id = 'spinnerStyle';
+            style.textContent = `
+                .spinner {
+                    display: inline-block;
+                    width: 12px;
+                    height: 12px;
+                    border: 2px solid rgba(255,255,255,0.3);
+                    border-radius: 50%;
+                    border-top-color: white;
+                    animation: spin 1s linear infinite;
+                    margin-right: 6px;
+                }
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
         // Reset the issue data store
         this.issueData = {};
 
-        // First, try to fetch a simple endpoint to test the connection
         try {
+            // First, try to fetch a simple endpoint to test the connection
             const testResponse = await fetch(`${this.proxyUrl}${this.proxyEndpoint}/serverInfo`);
 
             if (!testResponse.ok) {
@@ -382,33 +354,23 @@ class JiraMetrics {
             
             const testData = await testResponse.json();
             console.log('Successfully connected to Jira:', testData);
-        } catch (error) {
-            if (error.message.includes('Failed to fetch')) {
-                throw new Error('Could not connect to Jira. Please make sure the proxy server is running.');
-            }
-            this.showError(`Connection test failed: ${error.message}`);
-            console.error('Connection test failed:', error);
-            return;
-        }
-
-        // If test succeeds, fetch the actual data
-        try {
+            
             // Build the JQL query with filters
             let jqlParts = [];
             
             // Add board/project filter if selected
-            if (this.selectedBoard) {
-                jqlParts.push(`project = ${this.selectedBoard}`);
-                console.log('Filtering by board:', this.selectedBoard);
+            if (this.selectedBoardId) {
+                jqlParts.push(`project = ${this.selectedBoardId}`);
+                console.log('Filtering by board:', this.selectedBoardId);
             }
             
             // Add sprint filter if selected
-            if (this.selectedSprint) {
-                jqlParts.push(`sprint = ${this.selectedSprint}`);
-                console.log('Filtering by sprint ID:', this.selectedSprint);
+            if (this.selectedSprintId) {
+                jqlParts.push(`sprint = ${this.selectedSprintId}`);
+                console.log('Filtering by sprint ID:', this.selectedSprintId);
                 
                 // Find the sprint name for logging
-                const sprint = this.sprints.find(s => s.id.toString() === this.selectedSprint);
+                const sprint = this.sprints.find(s => s.id.toString() === this.selectedSprintId);
                 if (sprint) {
                     console.log('Sprint name:', sprint.name);
                 }
@@ -458,54 +420,103 @@ class JiraMetrics {
             // After loading issues, fetch resolution metrics
             await this.fetchResolutionMetrics();
             
+            // Update the ticket list title based on sprint selection
+            const ticketListTitle = document.getElementById('ticketListTitle');
+            if (ticketListTitle) {
+                if (this.selectedSprintId && this.sprints.length > 0) {
+                    const selectedSprint = this.sprints.find(s => s.id.toString() === this.selectedSprintId);
+                    ticketListTitle.textContent = selectedSprint ? `Tickets in ${selectedSprint.name}` : 'Tickets for Selected Sprint';
+                } else {
+                    ticketListTitle.textContent = 'Recent Tickets'; // Default title
+                }
+            }
+
             this.updateMetrics(this.issues);
             this.updateTicketTable(this.issues);
         } catch (error) {
             this.showError(`Failed to fetch Jira data: ${error.message}`);
             console.error('Failed to fetch Jira data:', error);
+        } finally {
+            // Restore button text and enable button
+            refreshBtn.innerHTML = originalText;
+            refreshBtn.disabled = false;
         }
     }
     
     async fetchResolutionMetrics() {
+        console.log('Fetching resolution metrics');
         try {
-            // Construct query parameters based on current filters
-            let queryParams = new URLSearchParams();
-            
-            // Add JQL for resolved issues only
-            let jql = "resolution is not EMPTY ORDER BY created DESC";
-            
-            // Add board/project filter if selected
-            if (this.selectedBoard) {
-                queryParams.append('board', this.selectedBoard);
+            // Show loading state
+            const loadingElement = document.querySelector('#loading');
+            if (loadingElement) {
+                loadingElement.classList.remove('hidden');
             }
             
-            // Add sprint filter if selected
-            if (this.selectedSprint) {
-                jql = `sprint = ${this.selectedSprint} AND ${jql}`;
-            }
+            // Construct JQL for resolved issues to analyze cycle time
+            let jql = this.selectedSprintId 
+                ? `sprint = ${this.selectedSprintId}` 
+                : 'resolved >= -90d';
+                
+            // Add exclusions if necessary to filter out unwanted issues
+            jql += ' ORDER BY key ASC';
             
-            queryParams.append('jql', jql);
+            // Add board filter if a board is selected
+            const boardParam = this.selectedBoardId ? `&board=${this.selectedBoardId}` : '';
             
-            const url = `${this.proxyUrl}${this.proxyEndpoint}/resolution-metrics?${queryParams.toString()}`;
-            console.log('Fetching resolution metrics from:', url);
+            // Add optional parameters for the new metrics calculation
+            const excludeWeekendsCheckbox = document.querySelector('#exclude-weekends');
+            // Default to true if checkbox doesn't exist, otherwise use its value
+            const excludeWeekends = excludeWeekendsCheckbox ? excludeWeekendsCheckbox.checked : true;
+            const minTimeThreshold = 0.167; // 10 minutes in hours
             
-            const response = await fetch(url);
+            // Construct final query URL with parameters
+            const queryParams = `jql=${encodeURIComponent(jql)}&maxResults=200${boardParam}&excludeWeekends=${excludeWeekends}&minTimeThreshold=${minTimeThreshold}`;
+            
+            const requestUrl = `${this.proxyUrl}${this.proxyEndpoint}/resolution-metrics?${queryParams}`;
+            console.log(`Fetching resolution metrics from: ${requestUrl}`);
+            const response = await fetch(requestUrl);
             
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Resolution metrics response error:', response.status, errorText);
-                throw new Error(`Failed to fetch resolution metrics: ${response.status} ${response.statusText}`);
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await response.json();
+                    throw new Error(`Failed to fetch resolution metrics: ${errorData.error || response.statusText}`);
+                } else {
+                    // Not JSON, probably HTML error page
+                    const errorText = await response.text();
+                    console.error('Server returned non-JSON response:', errorText.substring(0, 500));
+                    throw new Error(`Server error (${response.status}): Not a valid JSON response`);
+                }
             }
             
-            const data = await response.json();
-            console.log('Resolution metrics data:', data);
-            this.resolutionMetrics = data;
+            // Check if response is actually JSON before parsing
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const textResponse = await response.text();
+                console.error('Expected JSON but got:', textResponse.substring(0, 500));
+                throw new Error('Server returned non-JSON response');
+            }
             
-            // Render the resolution phase chart
+            this.resolutionMetrics = await response.json();
+            
+            console.log('Resolution metrics response:', this.resolutionMetrics);
+            
+            // Render the resolution metrics
             this.renderPhaseResolutionChart();
             
+            // Update UI elements that need metrics data
+            const metricsElement = document.querySelector('#resolution-metrics');
+            if (metricsElement) {
+                metricsElement.classList.remove('hidden');
+            }
         } catch (error) {
             console.error('Error fetching resolution metrics:', error);
+            this.showError(`Error fetching resolution metrics: ${error.message}`);
+        } finally {
+            const loadingElement = document.querySelector('#loading');
+            if (loadingElement) {
+                loadingElement.classList.add('hidden');
+            }
         }
     }
     
@@ -523,32 +534,493 @@ class JiraMetrics {
         chartContainer.innerHTML = '';
         insightsContainer.innerHTML = '';
         
-        if (!this.resolutionMetrics || !this.resolutionMetrics.cycle_times) {
-            console.warn('No cycle time metrics available', this.resolutionMetrics);
-            chartContainer.innerHTML = '<p class="no-data">No cycle time data available. Select a board and load tickets to see analysis.</p>';
+        // Add debug button at the top
+        const debugButton = document.createElement('button');
+        debugButton.textContent = 'Debug Data';
+        debugButton.style.fontSize = '12px';
+        debugButton.style.padding = '4px 8px';
+        debugButton.style.marginBottom = '10px';
+        debugButton.style.backgroundColor = '#f0f0f0';
+        debugButton.style.border = '1px solid #ccc';
+        debugButton.style.borderRadius = '4px';
+        debugButton.style.cursor = 'pointer';
+        debugButton.onclick = () => {
+            console.log('Debug resolution metrics:', this.resolutionMetrics);
+            
+            const dataDisplay = document.createElement('pre');
+            dataDisplay.style.padding = '10px';
+            dataDisplay.style.backgroundColor = '#f5f5f5';
+            dataDisplay.style.border = '1px solid #ddd';
+            dataDisplay.style.borderRadius = '4px';
+            dataDisplay.style.whiteSpace = 'pre-wrap';
+            dataDisplay.style.fontSize = '12px';
+            dataDisplay.style.maxHeight = '400px';
+            dataDisplay.style.overflow = 'auto';
+            dataDisplay.textContent = JSON.stringify(this.resolutionMetrics, null, 2);
+            
+            // Create modal
+            const modal = document.createElement('div');
+            modal.style.position = 'fixed';
+            modal.style.left = '0';
+            modal.style.top = '0';
+            modal.style.width = '100%';
+            modal.style.height = '100%';
+            modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            modal.style.zIndex = '1000';
+            modal.style.display = 'flex';
+            modal.style.justifyContent = 'center';
+            modal.style.alignItems = 'center';
+            
+            const modalContent = document.createElement('div');
+            modalContent.style.backgroundColor = '#fff';
+            modalContent.style.padding = '20px';
+            modalContent.style.borderRadius = '5px';
+            modalContent.style.width = '80%';
+            modalContent.style.maxWidth = '800px';
+            modalContent.style.maxHeight = '80%';
+            modalContent.style.overflow = 'auto';
+            
+            const closeButton = document.createElement('button');
+            closeButton.textContent = 'Close';
+            closeButton.style.padding = '5px 10px';
+            closeButton.style.marginTop = '10px';
+            closeButton.onclick = () => document.body.removeChild(modal);
+            
+            modalContent.appendChild(document.createTextNode('Raw Resolution Metrics Data:'));
+            modalContent.appendChild(document.createElement('br'));
+            modalContent.appendChild(dataDisplay);
+            modalContent.appendChild(closeButton);
+            modal.appendChild(modalContent);
+            
+            document.body.appendChild(modal);
+        };
+        chartContainer.appendChild(debugButton);
+        
+        // Check if we're using the new metrics format or the old format
+        if (this.resolutionMetrics && this.resolutionMetrics.stage_metrics) {
+            // New format - use stage_metrics
+            this.renderStageTimeChart(chartContainer, insightsContainer);
+        } else if (this.resolutionMetrics && this.resolutionMetrics.cycle_times) {
+            // Old format - use cycle_times
+            const cycleTimes = this.resolutionMetrics.cycle_times;
+            console.log('Rendering chart with cycle times:', cycleTimes);
+            
+            // Get the cycle names excluding "Total" (will handle separately)
+            const cycleNames = Object.keys(cycleTimes).filter(name => name !== 'Total');
+            const cycleHours = cycleNames.map(name => cycleTimes[name].average_hours);
+            
+            // Calculate maximum value for scaling
+            const maxValue = Math.max(...cycleHours, 1); // Ensure we have a non-zero max
+            
+            // Create the main visualization
+            this.renderCycleTimeChart(chartContainer, cycleTimes, cycleNames, maxValue);
+            
+            // Create the insights panel
+            this.renderCycleTimeInsights(insightsContainer, cycleTimes);
+            
+            // Add workflow diagram if we have cycle data
+            if (cycleNames.length > 0 && cycleHours.some(h => h > 0)) {
+                this.renderWorkflowDiagram(chartContainer, cycleTimes);
+            }
+        } else {
+            console.warn('No metrics available', this.resolutionMetrics);
+            chartContainer.innerHTML = '<p class="no-data">No workflow metrics available. Select a board and load tickets to see analysis.</p>';
+        }
+    }
+    
+    renderStageTimeChart(chartContainer, insightsContainer) {
+        console.log('renderStageTimeChart called');
+        try {
+            const stageMetrics = this.resolutionMetrics.stage_metrics;
+            console.log('Stage metrics data structure:', stageMetrics);
+            
+            if (!stageMetrics || Object.keys(stageMetrics).length === 0) {
+                console.warn('No stage metrics available or empty object');
+                chartContainer.innerHTML = '<p class="no-data">No stage metrics available. This could be because no tickets have transitioned through workflow stages.</p>';
+                return;
+            }
+            
+            // Get stage names and sort them in workflow order
+            const stageNames = Object.keys(stageMetrics);
+            const workflowOrder = {
+                'To Do': 1,
+                'In Progress': 2,
+                'Code Review': 3,
+                'QA': 4,
+                'Done': 5
+            };
+            
+            stageNames.sort((a, b) => {
+                return (workflowOrder[a] || 99) - (workflowOrder[b] || 99);
+            });
+            
+            // Exclude "Done" from the chart as it's typically the end state
+            const chartStages = stageNames.filter(name => name !== 'Done');
+            
+            if (chartStages.length === 0) {
+                console.warn('No stages to display after filtering');
+                chartContainer.innerHTML = '<p class="no-data">No workflow stages found to display in the chart.</p>';
+                return;
+            }
+            
+            // Create chart container with styling
+            const chartWrapper = document.createElement('div');
+            chartWrapper.style.padding = '25px';
+            chartWrapper.style.backgroundColor = '#fff';
+            chartWrapper.style.borderRadius = '8px';
+            chartWrapper.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
+            
+            // Add title
+            const chartTitle = document.createElement('div');
+            chartTitle.style.fontWeight = 'bold';
+            chartTitle.style.fontSize = '20px';
+            chartTitle.style.marginBottom = '15px';
+            chartTitle.style.color = '#172B4D';
+            chartTitle.textContent = 'Average Time Spent in Each Workflow Stage';
+            chartWrapper.appendChild(chartTitle);
+            
+            // Add description
+            const chartDesc = document.createElement('div');
+            chartDesc.style.fontSize = '14px';
+            chartDesc.style.color = '#666';
+            chartDesc.style.marginBottom = '25px';
+            
+            // Add calculation parameters info
+            const calcParams = this.resolutionMetrics.calculation_params || {};
+            const excludeWeekends = calcParams.exclude_weekends ? 'excluding weekends' : 'including all days';
+            const minThreshold = calcParams.min_time_threshold ? `ignoring periods shorter than ${this.formatDuration(calcParams.min_time_threshold)}` : '';
+            
+            chartDesc.innerHTML = `Average total time tickets spend in each workflow stage, including any return visits to the same stage (${excludeWeekends}, ${minThreshold}).`;
+            chartWrapper.appendChild(chartDesc);
+            
+            // Create separate sections for averages and open tickets
+            const closedSection = document.createElement('div');
+            closedSection.style.marginTop = '30px';
+            closedSection.style.marginBottom = '40px';
+            
+            const closedTitle = document.createElement('div');
+            closedTitle.style.fontWeight = 'bold';
+            closedTitle.style.fontSize = '18px';
+            closedTitle.style.marginBottom = '20px';
+            closedTitle.textContent = 'Average Time Per Stage (All Tickets)';
+            closedSection.appendChild(closedTitle);
+            
+            // Create bars for each stage - use avg_per_ticket as the primary metric
+            const avgHoursPerTicket = chartStages.map(name => stageMetrics[name].avg_per_ticket);
+            const maxValue = Math.max(...avgHoursPerTicket, 1);
+            
+            // Create bars container for average metrics
+            const barsContainer = document.createElement('div');
+            
+            chartStages.forEach((stage, index) => {
+                const stageData = stageMetrics[stage];
+                const avgHours = stageData.avg_per_ticket;
+                const percentage = (avgHours / maxValue) * 100;
+                
+                // Create row container
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.alignItems = 'center';
+                row.style.marginBottom = '12px'; // Reduced from 20px
+                
+                // Create label
+                const label = document.createElement('div');
+                label.style.width = '160px';
+                label.style.paddingRight = '15px';
+                label.style.fontWeight = 'bold';
+                label.style.fontSize = '14px'; // Reduced from 16px
+                label.textContent = stage;
+                row.appendChild(label);
+                
+                // Create bar container
+                const barContainer = document.createElement('div');
+                barContainer.style.flex = '1';
+                barContainer.style.height = '28px'; // Reduced from 38px
+                barContainer.style.backgroundColor = '#f0f0f0';
+                barContainer.style.borderRadius = '4px'; // Slightly smaller radius
+                barContainer.style.position = 'relative';
+                barContainer.style.overflow = 'hidden';
+                
+                // Create the colored bar
+                const bar = document.createElement('div');
+                bar.style.position = 'absolute';
+                bar.style.left = '0';
+                bar.style.top = '0';
+                bar.style.height = '100%';
+                bar.style.width = `${percentage}%`;
+                bar.style.backgroundColor = this.getStageColor(stage);
+                bar.style.transition = 'width 0.8s ease';
+                barContainer.appendChild(bar);
+                
+                // Create value label
+                const valueLabel = document.createElement('div');
+                valueLabel.style.position = 'absolute';
+                valueLabel.style.right = '10px'; // Adjusted padding
+                valueLabel.style.top = '50%';
+                valueLabel.style.transform = 'translateY(-50%)';
+                valueLabel.style.color = '#000';
+                valueLabel.style.fontWeight = 'bold';
+                valueLabel.style.fontSize = '14px'; // Reduced from 16px
+                valueLabel.style.textShadow = '0 0 3px #fff';
+                valueLabel.textContent = this.formatDuration(avgHours);
+                barContainer.appendChild(valueLabel);
+                
+                // Create sample count
+                const sampleCount = document.createElement('div');
+                sampleCount.style.marginLeft = '15px';
+                sampleCount.style.fontSize = '13px'; // Reduced from 14px
+                sampleCount.style.color = '#666';
+                sampleCount.style.minWidth = '90px';
+                sampleCount.textContent = `n=${stageData.tickets_count}`;
+                
+                // Add additional info about open vs closed
+                if (stageData.open_tickets_count > 0) {
+                    sampleCount.textContent += ` (${stageData.open_tickets_count} open)`;
+                }
+                
+                row.appendChild(barContainer);
+                row.appendChild(sampleCount);
+                
+                barsContainer.appendChild(row);
+            });
+            
+            closedSection.appendChild(barsContainer);
+            chartWrapper.appendChild(closedSection);
+            
+            // Only add open tickets section if there are any open tickets
+            const hasOpenTickets = chartStages.some(stage => stageMetrics[stage].open_tickets_count > 0);
+            
+            if (hasOpenTickets) {
+                // Create separate section for currently open tickets
+                const openSection = document.createElement('div');
+                openSection.style.marginTop = '30px'; // Reduced from 40px
+                
+                const openTitle = document.createElement('div');
+                openTitle.style.fontWeight = 'bold';
+                openTitle.style.fontSize = '16px'; // Reduced from 18px
+                openTitle.style.marginBottom = '15px'; // Reduced from 20px
+                openTitle.textContent = 'Average Time in Current Stages (Open Tickets Only)';
+                openSection.appendChild(openTitle);
+                
+                // Create bars for open ticket metrics
+                const openBarsContainer = document.createElement('div');
+                
+                // Extract open averages and calculate max
+                const openStages = chartStages.filter(stage => stageMetrics[stage].open_tickets_count > 0);
+                const openAvgHours = openStages.map(stage => stageMetrics[stage].avg_per_open_ticket);
+                const openMaxValue = Math.max(...openAvgHours, 1);
+                
+                openStages.forEach(stage => {
+                    const stageData = stageMetrics[stage];
+                    
+                    // Skip if no open tickets
+                    if (stageData.open_tickets_count === 0) return;
+                    
+                    const avgOpenHours = stageData.avg_per_open_ticket;
+                    const percentage = (avgOpenHours / openMaxValue) * 100;
+                    
+                    // Create row container
+                    const row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.alignItems = 'center';
+                    row.style.marginBottom = '12px'; // Reduced from 20px
+                    
+                    // Create label
+                    const label = document.createElement('div');
+                    label.style.width = '160px';
+                    label.style.paddingRight = '15px';
+                    label.style.fontWeight = 'bold';
+                    label.style.fontSize = '14px'; // Reduced from 16px
+                    label.textContent = stage;
+                    row.appendChild(label);
+                    
+                    // Create bar container
+                    const barContainer = document.createElement('div');
+                    barContainer.style.flex = '1';
+                    barContainer.style.height = '28px'; // Reduced from 38px
+                    barContainer.style.backgroundColor = '#f0f0f0';
+                    barContainer.style.borderRadius = '4px'; // Slightly smaller radius
+                    barContainer.style.position = 'relative';
+                    barContainer.style.overflow = 'hidden';
+                    
+                    // Create the colored bar
+                    const bar = document.createElement('div');
+                    bar.style.position = 'absolute';
+                    bar.style.left = '0';
+                    bar.style.top = '0';
+                    bar.style.height = '100%';
+                    bar.style.width = `${percentage}%`;
+                    bar.style.backgroundColor = this.getStageColor(stage, 0.7); // Use lighter shade
+                    bar.style.transition = 'width 0.8s ease';
+                    barContainer.appendChild(bar);
+                    
+                    // Create value label
+                    const valueLabel = document.createElement('div');
+                    valueLabel.style.position = 'absolute';
+                    valueLabel.style.right = '10px'; // Adjusted padding
+                    valueLabel.style.top = '50%';
+                    valueLabel.style.transform = 'translateY(-50%)';
+                    valueLabel.style.color = '#000';
+                    valueLabel.style.fontWeight = 'bold';
+                    valueLabel.style.fontSize = '14px'; // Reduced from 16px
+                    valueLabel.style.textShadow = '0 0 3px #fff';
+                    valueLabel.textContent = this.formatDuration(avgOpenHours);
+                    barContainer.appendChild(valueLabel);
+                    
+                    // Create sample count
+                    const sampleCount = document.createElement('div');
+                    sampleCount.style.marginLeft = '15px';
+                    sampleCount.style.fontSize = '13px'; // Reduced from 14px
+                    sampleCount.style.color = '#666';
+                    sampleCount.style.minWidth = '80px';
+                    sampleCount.textContent = `n=${stageData.open_tickets_count}`;
+                    
+                    row.appendChild(barContainer);
+                    row.appendChild(sampleCount);
+                    
+                    openBarsContainer.appendChild(row);
+                });
+                
+                openSection.appendChild(openBarsContainer);
+                chartWrapper.appendChild(openSection);
+            }
+            
+            chartContainer.appendChild(chartWrapper);
+            console.log('Chart rendered successfully');
+            
+            // Generate insights based on stage metrics
+            this.renderStageInsights(insightsContainer, stageMetrics);
+        } catch (error) {
+            console.error('Error rendering stage time chart:', error);
+            chartContainer.innerHTML = `<p class="no-data">Error rendering chart: ${error.message}</p>`;
+        }
+    }
+    
+    renderStageInsights(container, stageMetrics) {
+        const insightsWrapper = document.createElement('div');
+        
+        // Add title
+        const insightsTitle = document.createElement('h3');
+        insightsTitle.textContent = 'Workflow Insights & Recommendations';
+        insightsTitle.style.fontSize = '16px';
+        insightsTitle.style.marginTop = '0';
+        insightsWrapper.appendChild(insightsTitle);
+        
+        // Get stage data for analysis
+        const stageNames = Object.keys(stageMetrics).filter(name => name !== 'Done');
+        
+        if (stageNames.length === 0) {
+            const noData = document.createElement('p');
+            noData.textContent = 'Not enough data to generate insights.';
+            insightsWrapper.appendChild(noData);
+            container.appendChild(insightsWrapper);
             return;
         }
         
-        const cycleTimes = this.resolutionMetrics.cycle_times;
-        console.log('Rendering chart with cycle times:', cycleTimes);
+        // Calculate total development cycle time (sum of all stages except Done)
+        let totalCycleHours = 0;
+        stageNames.forEach(stage => {
+            totalCycleHours += stageMetrics[stage].avg_per_ticket;
+        });
         
-        // Get the cycle names excluding "Total" (will handle separately)
-        const cycleNames = Object.keys(cycleTimes).filter(name => name !== 'Total');
-        const cycleHours = cycleNames.map(name => cycleTimes[name].average_hours);
+        // Find the stage with the most time per ticket
+        let longestStage = stageNames[0];
+        stageNames.forEach(stage => {
+            if (stageMetrics[stage].avg_per_ticket > stageMetrics[longestStage].avg_per_ticket) {
+                longestStage = stage;
+            }
+        });
         
-        // Calculate maximum value for scaling
-        const maxValue = Math.max(...cycleHours, 1); // Ensure we have a non-zero max
+        // Find largest open stage if there are open tickets
+        let longestOpenStage = null;
+        let maxOpenTime = 0;
         
-        // Create the main visualization
-        this.renderCycleTimeChart(chartContainer, cycleTimes, cycleNames, maxValue);
+        stageNames.forEach(stage => {
+            if (stageMetrics[stage].open_tickets_count > 0 && 
+                stageMetrics[stage].avg_per_open_ticket > maxOpenTime) {
+                longestOpenStage = stage;
+                maxOpenTime = stageMetrics[stage].avg_per_open_ticket;
+            }
+        });
         
-        // Create the insights panel
-        this.renderCycleTimeInsights(insightsContainer, cycleTimes);
+        const insights = [];
         
-        // Add workflow diagram if we have cycle data
-        if (cycleNames.length > 0 && cycleHours.some(h => h > 0)) {
-            this.renderWorkflowDiagram(chartContainer, cycleTimes);
+        // Add insight about the longest stage
+        if (stageMetrics[longestStage].avg_per_ticket > 0) {
+            const percentage = Math.round((stageMetrics[longestStage].avg_per_ticket / totalCycleHours) * 100);
+            insights.push({
+                text: `The <strong>${longestStage}</strong> stage takes the longest at ${this.formatDuration(stageMetrics[longestStage].avg_per_ticket)} (${percentage}% of total workflow time).`,
+                recommendation: `Consider reviewing the ${longestStage.toLowerCase()} process to identify bottlenecks.`
+            });
         }
+        
+        // Add insight about currently open tickets
+        if (longestOpenStage && maxOpenTime > 0) {
+            insights.push({
+                text: `<strong>${stageMetrics[longestOpenStage].open_tickets_count}</strong> tickets are currently in <strong>${longestOpenStage}</strong> for an average of ${this.formatDuration(maxOpenTime)}.`,
+                recommendation: `Consider reviewing these tickets for any that might be stuck or blocked.`
+            });
+        }
+        
+        // Add review/QA related insight
+        if (stageMetrics['Code Review'] && stageMetrics['Code Review'].avg_per_ticket > 0) {
+            const reviewPercentage = Math.round((stageMetrics['Code Review'].avg_per_ticket / totalCycleHours) * 100);
+            if (reviewPercentage > 30) {
+                insights.push({
+                    text: `Code Review takes up ${reviewPercentage}% of the total workflow time.`,
+                    recommendation: 'Consider implementing pair programming or more frequent, smaller reviews.'
+                });
+            }
+        }
+        
+        // Add QA stage insight if present
+        if (stageMetrics['QA'] && stageMetrics['QA'].avg_per_ticket > 0) {
+            const qaPercentage = Math.round((stageMetrics['QA'].avg_per_ticket / totalCycleHours) * 100);
+            if (qaPercentage > 30) {
+                insights.push({
+                    text: `QA testing takes up ${qaPercentage}% of the total workflow time.`,
+                    recommendation: 'Consider implementing more automated testing or earlier testing approaches.'
+                });
+            }
+        }
+        
+        // Add data validation insight
+        const sampleSize = Math.min(...stageNames.map(stage => stageMetrics[stage].tickets_count));
+        insights.push({
+            text: `This analysis is based on a sample of ${sampleSize} tickets that passed through workflow stages.`,
+            recommendation: sampleSize < 10 
+                ? 'Consider collecting more data for more reliable insights.'
+                : 'The sample size is reasonable for analysis.'
+        });
+        
+        // Create HTML for insights
+        const insightsList = document.createElement('div');
+        insightsList.style.marginTop = '15px';
+        
+        insights.forEach(insight => {
+            const insightItem = document.createElement('div');
+            insightItem.style.marginBottom = '15px';
+            insightItem.style.padding = '10px';
+            insightItem.style.backgroundColor = '#f5f6f7';
+            insightItem.style.borderRadius = '4px';
+            insightItem.style.borderLeft = '3px solid #4d90fe';
+            
+            const insightText = document.createElement('div');
+            insightText.style.marginBottom = '5px';
+            insightText.innerHTML = insight.text;
+            insightItem.appendChild(insightText);
+            
+            const recommendationText = document.createElement('div');
+            recommendationText.style.fontSize = '12px';
+            recommendationText.style.color = '#555';
+            recommendationText.innerHTML = `<strong>Recommendation:</strong> ${insight.recommendation}`;
+            insightItem.appendChild(recommendationText);
+            
+            insightsList.appendChild(insightItem);
+        });
+        
+        insightsWrapper.appendChild(insightsList);
+        container.appendChild(insightsWrapper);
     }
     
     renderCycleTimeChart(container, cycleTimes, cycleNames, maxValue) {
@@ -886,6 +1358,9 @@ class JiraMetrics {
                 // Analyze ping-pong transitions
                 this.analyzePingPongTransitions(issue, data);
                 
+                // Analyze ticket churn transitions
+                this.analyzeChurnTransitions(issue, data);
+                
             } catch (error) {
                 console.error(`Error analyzing risk for ${issue.key}:`, error);
             }
@@ -897,7 +1372,8 @@ class JiraMetrics {
         // Count aging tickets
         const atRiskCount = Object.values(this.issueData).filter(data => data.isAging).length;
         const pingPongCount = Object.values(this.issueData).filter(data => data.isPingPong).length;
-        console.log(`Analysis complete: Found ${atRiskCount} aging tickets and ${pingPongCount} ping-pong tickets`);
+        const churnCount = Object.values(this.issueData).filter(data => data.isChurn).length;
+        console.log(`Analysis complete: Found ${atRiskCount} aging tickets and ${pingPongCount} ticket churn tickets and ${churnCount} ticket churn tickets`);
     }
     
     analyzeRiskLevel(issue, data, now) {
@@ -1154,12 +1630,159 @@ class JiraMetrics {
             console.log(`Ping-pong ticket ${issueKey} detected! Score: ${pingPongScore}`);
         }
     }
+    
+    analyzeChurnTransitions(issue, data) {
+        // Extract issue key for logging
+        const issueKey = issue.key;
+        
+        // Check if we have ticket churn data from the backend
+        if (data.ping_pong_score !== undefined) {
+            // Use the backend's ticket churn score
+            this.issueData[issueKey] = this.issueData[issueKey] || {};
+            this.issueData[issueKey].churnScore = data.ping_pong_score;
+            this.issueData[issueKey].churnTransitions = data.ping_pong_transitions || [];
+            this.issueData[issueKey].isChurn = data.ping_pong_score >= this.churnThreshold;
+            
+            console.log(`Using backend ticket churn score for ${issueKey}: ${data.ping_pong_score}`);
+            return;
+        }
+        
+        // No ticket churn data from backend, calculate from status changes
+        const statusChanges = data.status_changes || [];
+        if (statusChanges.length < 3) {
+            // Not enough status changes for ticket churn
+            this.issueData[issueKey] = this.issueData[issueKey] || {};
+            this.issueData[issueKey].churnScore = 0;
+            this.issueData[issueKey].isChurn = false;
+            this.issueData[issueKey].statusTransitions = [];
+            return;
+        }
+        
+        // Define status categories for transition tracking
+        const statusCategories = {
+            'to_do': ['TO DO', 'To Do', 'Backlog', 'Open', 'New', 'Product Backlog'],
+            'in_progress': ['IN PROGRESS', 'In Progress', 'Development', 'Implementing', 'Dev', 'Coding'],
+            'in_review': ['IN REVIEW', 'In Review', 'Code Review', 'Review', 'Reviewing', 'PR Review'],
+            'in_qa': ['IN QA', 'In QA', 'QA', 'Testing', 'Validation', 'Test'],
+            'done': ['DONE', 'Done', 'Closed', 'Resolved', 'Completed', 'Fixed']
+        };
+        
+        // Track the sequence of status categories
+        const categorySequence = [];
+        const actualChurnTransitions = []; // Array to store only churn-contributing transitions
+        let churnScore = 0;
+        const churnCounts = {
+            'in_progress_to_to_do': 0,
+            'in_review_to_in_progress': 0,
+            'in_qa_to_in_review': 0,
+            'in_qa_to_in_progress': 0,
+            'done_to_any': 0
+        };
+        
+        // Process each status change
+        for (let i = 0; i < statusChanges.length; i++) {
+            const change = statusChanges[i];
+            const statusName = change.to;
+            
+            // Determine status category
+            let category = null;
+            for (const [cat, statuses] of Object.entries(statusCategories)) {
+                if (statuses.includes(statusName)) {
+                    category = cat;
+                    break;
+                }
+                
+                // Try fuzzy match if exact match fails
+                if (!category && statuses.some(s => statusName.toLowerCase().includes(s.toLowerCase()))) {
+                    category = cat;
+                    break;
+                }
+            }
+            
+            // Skip if we couldn't categorize
+            if (!category) continue;
+            
+            // Add to sequence
+            categorySequence.push({
+                category,
+                date: change.date
+            });
+            
+            // Can't detect ticket churn until we have at least 2 status changes
+            if (categorySequence.length < 2) continue;
+            
+            // Get previous category
+            const previous = categorySequence[categorySequence.length - 2];
+            const current = categorySequence[categorySequence.length - 1];
+            
+            // Record the transition
+            transitions.push({
+                from: previous.category,
+                to: current.category,
+                date: current.date
+            });
+            
+            // Skip the first transition (initial status)
+            if (i > 0) {
+                let isChurnTransition = false;
+                // Check if this is a backward transition (ticket churn)
+                if (current.category === 'to_do' && previous.category === 'in_progress') {
+                    isChurnTransition = true;
+                    churnCounts['in_progress_to_to_do']++;
+                    console.log(`Issue ${issueKey}: Ticket churn detected - returned to backlog from development`);
+                }
+                else if (current.category === 'in_progress' && previous.category === 'in_review') {
+                    isChurnTransition = true;
+                    churnCounts['in_review_to_in_progress']++;
+                    console.log(`Issue ${issueKey}: Ticket churn detected - returned to development from review`);
+                }
+                else if (current.category === 'in_review' && previous.category === 'in_qa') {
+                    isChurnTransition = true;
+                    churnCounts['in_qa_to_in_review']++;
+                    console.log(`Issue ${issueKey}: Ticket churn detected - failed QA, returned to review`);
+                }
+                else if (current.category === 'in_progress' && previous.category === 'in_qa') {
+                    isChurnTransition = true;
+                    churnCounts['in_qa_to_in_progress']++;
+                    console.log(`Issue ${issueKey}: Ticket churn detected - failed QA, returned to development`);
+                }
+                else if (previous.category === 'done') {
+                    isChurnTransition = true;
+                    churnCounts['done_to_any']++;
+                    console.log(`Issue ${issueKey}: Ticket churn detected - reopened ticket from done state`);
+                }
+
+                if (isChurnTransition) {
+                    churnScore += 1;
+                    // Store the actual backward transition that contributed to the score
+                    actualChurnTransitions.push({
+                        from: previous.category,
+                        to: current.category,
+                        date: current.date
+                    });
+                }
+            }
+        }
+        
+        // Store the results
+        this.issueData[issueKey] = this.issueData[issueKey] || {};
+        this.issueData[issueKey].churnScore = churnScore;
+        this.issueData[issueKey].statusTransitions = actualChurnTransitions; // Store only actual churn transitions
+        this.issueData[issueKey].churnCounts = churnCounts;
+        this.issueData[issueKey].isChurn = churnScore >= this.churnThreshold;
+        
+        // Log if it's a ticket churn issue
+        if (this.issueData[issueKey].isChurn) {
+            console.log(`Ticket churn ticket ${issueKey} detected! Score: ${churnScore}`);
+        }
+    }
 
     updateMetrics(issues) {
-        // Total tickets
-        document.getElementById('totalTickets').textContent = issues.length;
+        // Remove Total tickets calculation
+        // document.getElementById('totalTickets').textContent = issues.length;
 
-        // Calculate average resolution time
+        // Remove average resolution time calculation
+        /*
         const resolvedIssues = issues.filter(issue => issue.fields.resolutiondate);
         const totalResolutionTime = resolvedIssues.reduce((total, issue) => {
             const created = new Date(issue.fields.created);
@@ -1171,6 +1794,7 @@ class JiraMetrics {
             ? Math.round(totalResolutionTime / (resolvedIssues.length * 24 * 60 * 60 * 1000))
             : 0;
         document.getElementById('avgResolutionTime').textContent = `${avgResolutionTime} days`;
+        */
 
         // Calculate priority distribution
         const priorityCounts = {};
@@ -1213,139 +1837,145 @@ class JiraMetrics {
         const riskSummaryElement = document.getElementById('riskSummary');
         if (!riskSummaryElement) return;
         
+        // Reset default chart styles potentially applied
+        riskSummaryElement.style.height = 'auto'; 
+        riskSummaryElement.style.justifyContent = 'flex-start';
+        riskSummaryElement.style.alignItems = 'stretch';
+        riskSummaryElement.style.backgroundColor = 'transparent';
+        riskSummaryElement.style.padding = '0'; // Remove chart padding
+
         // Count issues in each risk category and by status
-        const riskCounts = {
-            high: 0,
-            medium: 0
-        };
-        
-        // Count aging tickets by status category
-        const statusCounts = {
-            'In Progress': 0,
-            'In Review': 0,
-            'In QA': 0
-        };
-        
-        // List of active statuses we care about for aging
-        const activeStatuses = ['In Progress', 'In Review', 'In QA'];
-        
-        // Calculate the count for each risk level and status
+        const riskCounts = { high: 0, medium: 0 };
+        const statusCounts = { 'In Progress': 0, 'In Review': 0, 'In QA': 0 };
+        const activeStatuses = Object.keys(statusCounts);
+        let totalTicketsConsidered = 0;
+
         issues.forEach(issue => {
             const issueData = this.issueData[issue.key] || {};
             const riskLevel = issueData.riskLevel || 'none';
             const statusCategory = issueData.currentStatusCategory;
             
-            // Only count by risk level if it's an active status that can age
-            if (statusCategory && activeStatuses.includes(statusCategory) && (riskLevel === 'high' || riskLevel === 'medium')) {
-                riskCounts[riskLevel]++;
-                
-                // Count by status category
+            // Only consider active statuses for aging counts
+            if (statusCategory && activeStatuses.includes(statusCategory)) {
+                totalTicketsConsidered++; // Count tickets in relevant statuses
                 if (issueData.isAging) {
+                     if (riskLevel === 'high') riskCounts.high++;
+                     if (riskLevel === 'medium') riskCounts.medium++;
                     statusCounts[statusCategory] = (statusCounts[statusCategory] || 0) + 1;
                 }
             }
         });
         
-        // Calculate the total aging tickets (high + medium)
         const totalAging = riskCounts.high + riskCounts.medium;
+        const percentageAging = totalTicketsConsidered > 0 ? Math.round(totalAging / totalTicketsConsidered * 100) : 0;
+
+        // Define status colors here so they are always available
+        const statusColors = { 'In Progress': '#0052CC', 'In Review': '#6554C0', 'In QA': '#00875A' };
+
+        // Clear previous content
+        riskSummaryElement.innerHTML = '';
         
-        // Create info section about thresholds
-        let thresholdInfo = `
-            <div style="margin-top: 10px; font-size: 0.8em; color: #666; padding: 5px; border-radius: 3px; background-color: #f5f5f5;">
-                <div style="margin-bottom: 5px; font-weight: bold;">Current thresholds:</div>
-        `;
-        
-        for (const status of activeStatuses) {
+        // Main container for the summary
+        const summaryContainer = document.createElement('div');
+        summaryContainer.className = 'risk-summary-content';
+
+        // Overall Summary Text
+        const overallSummary = document.createElement('div');
+        overallSummary.className = 'risk-overall-summary';
+        if (totalAging === 0) {
+            overallSummary.textContent = 'No aging tickets found in active stages.';
+        } else {
+            overallSummary.innerHTML = `
+                <strong>${totalAging}</strong> aging ticket${totalAging !== 1 ? 's' : ''} 
+                found across active stages 
+                (${percentageAging}% of ${totalTicketsConsidered} tickets analyzed).
+            `;
+        }
+        summaryContainer.appendChild(overallSummary);
+
+        // Section for Risk Level breakdown
+        if (totalAging > 0) {
+            const riskLevelSection = document.createElement('div');
+            riskLevelSection.className = 'risk-breakdown-section';
+            
+            const riskTitle = document.createElement('h4');
+            riskTitle.textContent = 'By Risk Level:';
+            riskLevelSection.appendChild(riskTitle);
+
+            // High Risk Bar
+            if (riskCounts.high > 0) {
+                riskLevelSection.appendChild(this.createSummaryBar('High', riskCounts.high, totalAging, '#FF5630'));
+            }
+            // Medium Risk Bar
+            if (riskCounts.medium > 0) {
+                riskLevelSection.appendChild(this.createSummaryBar('Medium', riskCounts.medium, totalAging, '#FFAB00'));
+            }
+            summaryContainer.appendChild(riskLevelSection);
+        }
+
+        // Section for Status breakdown
+        if (totalAging > 0) {
+            const statusSection = document.createElement('div');
+            statusSection.className = 'risk-breakdown-section';
+
+            const statusTitle = document.createElement('h4');
+            statusTitle.textContent = 'By Current Status:';
+            statusSection.appendChild(statusTitle);
+
+            activeStatuses.forEach(status => {
+                if (statusCounts[status] > 0) {
+                    statusSection.appendChild(this.createSummaryBar(status, statusCounts[status], totalAging, statusColors[status]));
+                }
+            });
+            summaryContainer.appendChild(statusSection);
+        }
+
+        // Threshold Info Section
+        const thresholdSection = document.createElement('div');
+        thresholdSection.className = 'risk-threshold-info';
+        let thresholdInfoHTML = '<div style="margin-bottom: 5px; font-weight: bold;">Aging Thresholds Used:</div>';
+        activeStatuses.forEach(status => {
             const hours = this.riskThresholds[status] || 72;
             const days = Math.round(hours / 24 * 10) / 10;
-            thresholdInfo += `<div>${status}: ${hours} hours (${days} days)</div>`;
-        }
+            thresholdInfoHTML += `<div><span class="status-dot" style="background-color:${statusColors[status] || '#999'};"></span> ${status}: <strong>${hours}h (${days}d)</strong></div>`;
+        });
+        thresholdInfoHTML += '<div style="margin-top: 5px; font-style: italic;">High risk ≥ 2× threshold, Medium risk ≥ 1× threshold</div>';
+        thresholdSection.innerHTML = thresholdInfoHTML;
+        summaryContainer.appendChild(thresholdSection);
         
-        thresholdInfo += `
-                <div style="margin-top: 5px; font-style: italic;">
-                    High risk = 2× threshold, Medium risk = 1× threshold
-                </div>
-            </div>
-        `;
+        riskSummaryElement.appendChild(summaryContainer);
+    }
+
+    // Helper function to create consistent summary bars
+    createSummaryBar(label, count, total, color) {
+        const percentage = total > 0 ? Math.round(count / total * 100) : 0;
         
-        if (totalAging === 0) {
-            riskSummaryElement.innerHTML = `
-                <div style="text-align: center; padding: 20px;">No aging tickets</div>
-                ${thresholdInfo}
-            `;
-            return;
-        }
-        
-        // Generate HTML for the risk summary
-        let summaryHTML = `
-            <div style="margin: 10px 0;">
-                <div style="margin-bottom: 10px; font-weight: bold;">
-                    ${totalAging} aging ticket${totalAging !== 1 ? 's' : ''} (${Math.round(totalAging / issues.length * 100)}% of total)
-                </div>
-        `;
-        
-        // Show aging tickets by risk level
-        if (riskCounts.high > 0) {
-            const percentage = Math.round(riskCounts.high / totalAging * 100);
-            summaryHTML += `
-                <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                    <div style="width: 70px; font-weight: bold; color: #FF5630;">High:</div>
-                    <div style="background-color: #eee; height: 15px; flex-grow: 1; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${percentage}%; background-color: #FF5630; height: 100%;"></div>
-                    </div>
-                    <div style="width: 30px; text-align: right; margin-left: 5px;">${riskCounts.high}</div>
-                </div>
-            `;
-        }
-        
-        if (riskCounts.medium > 0) {
-            const percentage = Math.round(riskCounts.medium / totalAging * 100);
-            summaryHTML += `
-                <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                    <div style="width: 70px; font-weight: bold; color: #FFAB00;">Medium:</div>
-                    <div style="background-color: #eee; height: 15px; flex-grow: 1; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${percentage}%; background-color: #FFAB00; height: 100%;"></div>
-                    </div>
-                    <div style="width: 30px; text-align: right; margin-left: 5px;">${riskCounts.medium}</div>
-                </div>
-            `;
-        }
-        
-        // Add section heading for status breakdown
-        summaryHTML += `
-            <div style="margin-top: 15px; margin-bottom: 8px; font-weight: bold; border-top: 1px solid #ddd; padding-top: 10px;">
-                Aging tickets by status:
-            </div>
-        `;
-        
-        // Show aging tickets by status category
-        const statusColors = {
-            'In Progress': '#0052CC',  // Blue
-            'In Review': '#6554C0',    // Purple
-            'In QA': '#00875A'         // Green
-        };
-        
-        for (const [status, count] of Object.entries(statusCounts)) {
-            if (count > 0) {
-                const percentage = Math.round(count / totalAging * 100);
-                const color = statusColors[status] || '#999999';
-                
-                summaryHTML += `
-                    <div style="display: flex; align-items: center; margin-bottom: 5px;">
-                        <div style="width: 90px; font-weight: bold; color: ${color};">${status}:</div>
-                        <div style="background-color: #eee; height: 15px; flex-grow: 1; border-radius: 3px; overflow: hidden;">
-                            <div style="width: ${percentage}%; background-color: ${color}; height: 100%;"></div>
-                        </div>
-                        <div style="width: 30px; text-align: right; margin-left: 5px;">${count}</div>
-                    </div>
-                `;
-            }
-        }
-        
-        // Add threshold info at the bottom
-        summaryHTML += thresholdInfo;
-        summaryHTML += '</div>';
-        riskSummaryElement.innerHTML = summaryHTML;
+        const barWrapper = document.createElement('div');
+        barWrapper.className = 'risk-summary-bar-wrapper';
+
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'risk-summary-label';
+        labelDiv.textContent = label;
+        labelDiv.style.color = color;
+
+        const barContainer = document.createElement('div');
+        barContainer.className = 'risk-summary-bar-container';
+
+        const barFill = document.createElement('div');
+        barFill.className = 'risk-summary-bar-fill';
+        barFill.style.width = `${percentage}%`;
+        barFill.style.backgroundColor = color;
+
+        const countDiv = document.createElement('div');
+        countDiv.className = 'risk-summary-count';
+        countDiv.textContent = `${count} (${percentage}%)`;
+
+        barContainer.appendChild(barFill);
+        barWrapper.appendChild(labelDiv);
+        barWrapper.appendChild(barContainer);
+        barWrapper.appendChild(countDiv);
+
+        return barWrapper;
     }
 
     sortTickets(column) {
@@ -1414,6 +2044,11 @@ class JiraMetrics {
                     valueA = this.getRiskValue(this.issueData[a.key]?.riskLevel || 'none');
                     valueB = this.getRiskValue(this.issueData[b.key]?.riskLevel || 'none');
                     break;
+                case 'pingpong':
+                    // Sort by ping-pong score
+                    valueA = this.issueData[a.key]?.pingPongScore || 0;
+                    valueB = this.issueData[b.key]?.pingPongScore || 0;
+                    break;
                 default:
                     return 0;
             }
@@ -1442,6 +2077,16 @@ class JiraMetrics {
     }
 
     updateDisplayedTickets() {
+        // Get the latest checkbox states
+        const atRiskOnlyCheckbox = document.getElementById('atRiskOnlyCheckbox');
+        const pingPongOnlyCheckbox = document.getElementById('pingPongOnlyCheckbox');
+        const churnOnlyCheckbox = document.getElementById('churnOnlyCheckbox');
+        
+        // Update the filter states
+        this.showingAtRiskOnly = atRiskOnlyCheckbox ? atRiskOnlyCheckbox.checked : false;
+        this.showingPingPongOnly = pingPongOnlyCheckbox ? pingPongOnlyCheckbox.checked : false;
+        this.showingChurnOnly = churnOnlyCheckbox ? churnOnlyCheckbox.checked : false;
+        
         // Filter based on current checkbox states
         let displayedIssues = [...this.issues];
         
@@ -1483,9 +2128,11 @@ class JiraMetrics {
             const emptyRow = document.createElement('tr');
             emptyRow.innerHTML = `
                 <td colspan="9" style="text-align: center; padding: 20px;">
-                    ${this.showingAtRiskOnly && this.showingPingPongOnly ? 'No aging ping-pong tickets found' : 
-                     this.showingAtRiskOnly ? 'No aging tickets found' :
-                     this.showingPingPongOnly ? 'No ping-pong tickets found' : 'No tickets found'}
+                    ${this.showingAtRiskOnly && this.showingPingPongOnly && this.showingChurnOnly ? 'No aging back-and-forth ticket churn tickets found' : 
+                     this.showingAtRiskOnly && this.showingPingPongOnly ? 'No aging back-and-forth tickets found' :
+                     this.showingPingPongOnly && this.showingChurnOnly ? 'No back-and-forth ticket churn tickets found' :
+                     this.showingAtRiskOnly && this.showingChurnOnly ? 'No aging ticket churn tickets found' :
+                     this.showingChurnOnly ? 'No ticket churn found' : 'No tickets found'}
                 </td>
             `;
             tbody.appendChild(emptyRow);
@@ -1497,11 +2144,28 @@ class JiraMetrics {
             
             // Check if this issue is aging
             const issueData = this.issueData[issue.key] || {};
+            
+            // --- Get Churn Score/Flag from Backend Metrics (Primary Source) ---
+            let churnScore = 0;
+            let isChurn = false;
+            if (this.resolutionMetrics && 
+                this.resolutionMetrics.churn_metrics && 
+                this.resolutionMetrics.churn_metrics.tickets_with_scores &&
+                this.resolutionMetrics.churn_metrics.tickets_with_scores[issue.key]) {
+                
+                churnScore = this.resolutionMetrics.churn_metrics.tickets_with_scores[issue.key].score || 0;
+            } 
+            // Determine isChurn based on the score from backend metrics and the threshold
+            isChurn = churnScore >= this.churnThreshold;
+            console.log(`Table Render ${issue.key}: Score=${churnScore}, Threshold=${this.churnThreshold}, isChurn=${isChurn}`);
+            // --- End Churn Score Fetch ---
+
+            // Fetch aging/risk info separately (still needed for Aging column)
             const isAging = issueData.isAging || false;
             const riskLevel = issueData.riskLevel || 'none';
             const timeInStatus = issueData.timeInStatus || '';
-            const isPingPong = issueData.isPingPong || false;
-            const pingPongScore = issueData.pingPongScore || 0;
+            
+            // console.log(`Ticket ${issue.key} - Churn Score: ${churnScore}, isChurn: ${isChurn}`); // Updated log
             
             // Better extraction of author and assignee information
             // Try different paths and field names that might contain this data
@@ -1544,8 +2208,20 @@ class JiraMetrics {
             }
             
             // If it's a ping-pong ticket, add a border
-            if (isPingPong) {
-                row.style.border = '2px dashed #6554C0'; // Purple border for ping-pong tickets
+            if (issueData.isPingPong) {
+                row.style.border = '2px dashed #6554C0'; // Purple border for back-and-forth tickets
+            }
+            
+            // If it's a ticket churn, add a border
+            if (isChurn) {
+                row.style.border = '2px dashed #6554C0'; // Purple border for ticket churn tickets
+            }
+            
+            // If it's a high churn ticket, add a specific class for styling
+            if (isChurn) {
+                row.classList.add('high-churn-row');
+            } else {
+                 row.classList.remove('high-churn-row'); // Ensure class is removed if not churn
             }
             
             row.innerHTML = `
@@ -1571,11 +2247,18 @@ class JiraMetrics {
                     ` : ''}
                 </td>
                 <td>
-                    ${isPingPong ? `
-                        <span class="ping-pong-badge" style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold; color: white; background-color: #6554C0;">
-                            ${pingPongScore}
+                    ${issueData.isPingPong && issueData.pingPongScore > 0 ? `
+                        <span class="ticket-churn-badge" style="display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold; color: white; background-color: #6554C0;">
+                            ${issueData.pingPongScore}
                         </span>
                     ` : ''}
+                </td>
+                <td>
+                    ${isChurn ? `
+                        <span class="ticket-churn-badge" style="display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.85em; font-weight: bold; color: white; background-color: #6554C0;" title="Ticket Churn Score: ${churnScore}">
+                            ${churnScore}
+                        </span>
+                    ` : '-'} 
                 </td>
             `;
             
@@ -1605,8 +2288,9 @@ class JiraMetrics {
         const statusDurationDetails = document.getElementById('statusDurationDetails');
         const statusTimeline = document.getElementById('statusTimeline');
         const pingPongSection = document.getElementById('statusPingPongSection') || this.createPingPongSection();
+        const churnSection = document.getElementById('statusChurnSection') || this.createChurnSection();
         
-        if (!modal || !modalTitle || !statusDurationChart || !statusDurationDetails || !statusTimeline) {
+        if (!modal || !modalTitle || !statusDurationChart || !statusDurationDetails || !statusTimeline || !pingPongSection || !churnSection) {
             console.error('Modal elements not found');
             return;
         }
@@ -1617,6 +2301,7 @@ class JiraMetrics {
         statusDurationDetails.innerHTML = '';
         statusTimeline.innerHTML = '';
         if (pingPongSection) pingPongSection.innerHTML = '';
+        if (churnSection) churnSection.innerHTML = '';
         modal.style.display = 'block';
         
         // Check if we already have the data
@@ -1661,6 +2346,7 @@ class JiraMetrics {
         const statusDurationDetails = document.getElementById('statusDurationDetails');
         const statusTimeline = document.getElementById('statusTimeline');
         const pingPongSection = document.getElementById('statusPingPongSection') || this.createPingPongSection();
+        const churnSection = document.getElementById('statusChurnSection') || this.createChurnSection();
         
         // Update modal title with issue key and summary if available
         if (data.summary) {
@@ -1713,37 +2399,43 @@ class JiraMetrics {
         // Show status transition timeline
         this.renderStatusTimeline(statusTimeline, data.status_changes);
         
-        // Get ping-pong data - check several possible sources
-        let pingPongScore = 0;
-        let transitions = [];
-        
-        // First, check if we have data from the backend's ping_pong_metrics
-        if (data.ping_pong_metrics && data.ping_pong_metrics.tickets_with_scores && data.ping_pong_metrics.tickets_with_scores[issueKey]) {
-            const pingPongData = data.ping_pong_metrics.tickets_with_scores[issueKey];
-            pingPongScore = pingPongData.score;
-            transitions = pingPongData.transitions || [];
-        }
-        // Second, check if analyzePingPongTransitions already processed this issue
-        else if (this.issueData[issueKey] && this.issueData[issueKey].pingPongScore !== undefined) {
-            pingPongScore = this.issueData[issueKey].pingPongScore;
-            transitions = this.issueData[issueKey].statusTransitions || [];
-        }
-        // Otherwise, we need to process the statusChanges to find ping-pongs
-        else if (data.status_changes && data.status_changes.length > 0) {
-            // Process the status changes to calculate ping-pong score
-            // Create a temporary object to hold the data
-            const tempIssue = { key: issueKey };
-            this.analyzePingPongTransitions(tempIssue, data);
+        // --- Refactored Churn/PingPong Data Fetching ---
+        let finalChurnScore = 0;
+        let finalTransitions = [];
+
+        // Use data ONLY from the resolution metrics calculation as the source of truth
+        if (this.resolutionMetrics && 
+            this.resolutionMetrics.churn_metrics && 
+            this.resolutionMetrics.churn_metrics.tickets_with_scores &&
+            this.resolutionMetrics.churn_metrics.tickets_with_scores[issueKey]) {
             
-            // Now we should have the ping-pong data
-            if (this.issueData[issueKey]) {
-                pingPongScore = this.issueData[issueKey].pingPongScore || 0;
-                transitions = this.issueData[issueKey].statusTransitions || [];
-            }
-        }
+            const churnData = this.resolutionMetrics.churn_metrics.tickets_with_scores[issueKey];
+            finalChurnScore = churnData.score || 0;
+            finalTransitions = churnData.transitions || []; 
+            console.log(`Using churn score (${finalChurnScore}) and ${finalTransitions.length} transitions from resolutionMetrics for ${issueKey}`);
         
-        // Show ping-pong information
-        this.renderPingPongAnalysis(pingPongSection, pingPongScore, transitions);
+        } else {
+            // If ticket not in backend churn results, its score is effectively 0 for display purposes
+            console.log(`Churn data for ${issueKey} not found in resolutionMetrics. Displaying score as 0.`);
+            finalChurnScore = 0;
+            finalTransitions = []; 
+            // // Fallback logic removed - rely solely on backend metrics result
+            // console.warn(`Churn data for ${issueKey} not found in resolutionMetrics. Falling back to issueData.`);
+            // if (this.issueData[issueKey] && this.issueData[issueKey].churnScore !== undefined) {
+            //     finalChurnScore = this.issueData[issueKey].churnScore;
+            //     finalTransitions = this.issueData[issueKey].statusTransitions || []; 
+            // } else {
+            //      console.warn(`No pre-calculated churn data found for ${issueKey} in issueData either.`);
+            // }
+        }
+        // --- End Refactor ---
+
+        // Show ping-pong/churn information using the correctly sourced data
+        // NOTE: Assuming renderPingPongAnalysis and renderChurnAnalysis are essentially the same visualization.
+        // If they need different data sources later, this logic needs adjustment.
+        this.renderPingPongAnalysis(pingPongSection, finalChurnScore, finalTransitions);
+        // Remove the separate call to renderChurnAnalysis as renderPingPongAnalysis handles the display
+        // this.renderChurnAnalysis(churnSection, churnScore, transitions);
     }
     
     createPingPongSection() {
@@ -1760,6 +2452,19 @@ class JiraMetrics {
         return pingPongSection;
     }
     
+    createChurnSection() {
+        // Create the churn section if it doesn't exist
+        const modalContent = document.getElementById('modalContent');
+        const churnSection = document.createElement('div');
+        churnSection.id = 'statusChurnSection';
+        churnSection.className = 'status-churn';
+        
+        // Append to modalContent
+        modalContent.appendChild(churnSection);
+        
+        return churnSection;
+    }
+    
     renderPingPongAnalysis(container, pingPongScore, transitions) {
         if (!transitions || Object.keys(transitions).length === 0) {
             container.innerHTML = '';
@@ -1771,18 +2476,18 @@ class JiraMetrics {
         let html = `
             <div style="margin-top: 20px; border-radius: 5px; border: 1px solid #dfe1e6; overflow: hidden; max-height: 500px; display: flex; flex-direction: column;">
                 <div style="padding: 15px; background-color: ${isPingPong ? '#EAE6FF' : '#F4F5F7'}; border-bottom: 1px solid #dfe1e6; flex-shrink: 0;">
-                    <h3 style="margin: 0; color: ${isPingPong ? '#6554C0' : '#172B4D'};">Status Back-and-Forth Analysis</h3>
+                    <h3 style="margin: 0; color: ${isPingPong ? '#6554C0' : '#172B4D'};">Ticket Churn Analysis</h3>
                 </div>
                 
                 <div style="padding: 15px; overflow-y: auto; flex-grow: 1;">
                     ${isPingPong ? `
                         <div style="margin-bottom: 15px; padding: 10px; background-color: #F0F0FF; border-radius: 3px; border-left: 3px solid #6554C0; flex-shrink: 0;">
-                            <span style="font-weight: bold; color: #6554C0;">⚠️ This ticket has a high amount of back-and-forth movement between statuses.</span>
+                            <span style="font-weight: bold; color: #6554C0;">⚠️ This ticket has a high amount of ticket churn.</span>
                         </div>
                     ` : ''}
                     
                     <div style="margin-bottom: 15px; flex-shrink: 0;">
-                        <div style="font-size: 16px; margin-bottom: 5px;"><strong>Ping-pong score:</strong> 
+                        <div style="font-size: 16px; margin-bottom: 5px;"><strong>Ticket churn score:</strong> 
                             <span style="display: inline-block; padding: 2px 10px; background-color: ${
                                 pingPongScore >= this.pingPongThreshold ? '#6554C0' : 
                                 pingPongScore >= this.pingPongThreshold/2 ? '#00B8D9' : '#DFE1E6'
@@ -1791,7 +2496,7 @@ class JiraMetrics {
                             </span>
                         </div>
                         <div style="font-size: 13px; color: #5E6C84;">
-                            Scores of ${this.pingPongThreshold} or higher indicate problematic back-and-forth movement.
+                            Scores of ${this.pingPongThreshold} or higher indicate problematic ticket churn.
                         </div>
                     </div>
         `;
@@ -1823,6 +2528,12 @@ class JiraMetrics {
             
             // Add each transition type
             sortedTransitions.forEach(t => {
+                // --- Add this check ---
+                if (t.from === t.to) {
+                    console.log(`Skipping same-stage transition in churn table: ${t.from} -> ${t.to}`);
+                    return; // Skip rendering if from and to stages are the same
+                }
+                // --- End check ---
                 html += `
                     <tr style="border-bottom: 1px solid #DFE1E6;">
                         <td style="padding: 8px 0;">
@@ -1841,7 +2552,7 @@ class JiraMetrics {
         // Add explanation of ping-pong patterns
         html += `
                     <div style="margin-top: 15px; font-size: 13px; color: #5E6C84; padding: 10px; background-color: #F4F5F7; border-radius: 3px; flex-shrink: 0;">
-                        <p><strong>About ping-pong analysis:</strong> This analysis detects when a ticket moves backward in the workflow, counting each backward movement as 1 point.</p>
+                        <p><strong>About ticket churn analysis:</strong> This analysis detects when a ticket moves backward in the workflow, counting each backward movement as 1 point.</p>
                         <p>Backward movements include:</p>
                         <ul style="margin-top: 5px; padding-left: 20px;">
                             <li>Moving from In Progress back to To Do</li>
@@ -2053,6 +2764,11 @@ class JiraMetrics {
             // Get the from and to statuses
             const fromStatus = change.from || 'Unknown';
             const toStatus = change.to || 'Unknown';
+
+            if (fromStatus === toStatus) {
+                console.log(`Skipping same-status transition: ${fromStatus} -> ${toStatus}`);
+                continue; // Skip this iteration if from and to statuses are the same
+            }
             
             // Get colors for the key workflow states
             let toColor = this.getStatusColor(toStatus);
@@ -2451,7 +3167,7 @@ class JiraMetrics {
         const filters = [
             { id: 'filter-high-risk', label: 'High Risk', filter: 'highRisk' },
             { id: 'filter-stalled', label: 'Stalled', filter: 'stalled' },
-            { id: 'filter-ping-pong', label: 'Ping-Pong', filter: 'pingPong' },
+            { id: 'filter-ping-pong', label: 'Ticket Churn', filter: 'pingPong' },
             { id: 'filter-blocking', label: 'Blocking', filter: 'blocking' }
         ];
         
@@ -2566,7 +3282,8 @@ class JiraMetrics {
             <p>High Risk: ${filteredIssues.filter(i => this.issueData[i.key].isHighRisk).length}</p>
             <p>Stalled: ${filteredIssues.filter(i => this.issueData[i.key].isStalled).length}</p>
             <p>Blocking: ${filteredIssues.filter(i => this.issueData[i.key].isBlocking).length}</p>
-            <p>Ping-Pong: ${filteredIssues.filter(i => this.issueData[i.key].isPingPong).length}</p>
+            <p>Ticket Churn: ${filteredIssues.filter(i => this.issueData[i.key].isPingPong).length}</p>
+            <p>Ticket Churn: ${filteredIssues.filter(i => this.issueData[i.key].isChurn).length}</p>
         `;
         container.appendChild(summary);
     }
@@ -2704,6 +3421,9 @@ class JiraMetrics {
             
             // Load aging thresholds from the backend
             await this.loadAgingThresholds();
+            
+            // Find the Story Point field ID
+            await this.findStoryPointFieldId(); 
             
             // Fetch available boards from Jira
             await this.fetchBoards();
@@ -2882,6 +3602,396 @@ class JiraMetrics {
         boardSelect.appendChild(fragment);
         
         console.log(`Populated dropdown with ${boards.length} boards (${projectKeys.length} project groups, ${ungroupedBoards.length} ungrouped)`);
+    }
+
+    filterIssues() {
+        // Get the current filters
+        const showFiltered = document.getElementById('showFiltered').checked;
+        const showResolved = document.getElementById('showResolved').checked;
+        const showAtRiskOnly = document.getElementById('showAtRiskOnly').checked;
+        const showPingPongOnly = document.getElementById('showPingPongOnly').checked;
+        const showChurnOnly = document.getElementById('showChurnOnly').checked;
+        const textFilter = document.getElementById('textFilter').value.toLowerCase();
+        
+        // Store filter state
+        this.showingAtRiskOnly = showAtRiskOnly;
+        this.showingPingPongOnly = showPingPongOnly;
+        this.showingChurnOnly = showChurnOnly;
+        
+        // Log the state of all filters
+        console.log('Filter state:', { 
+            showFiltered, 
+            showResolved, 
+            showAtRiskOnly, 
+            showPingPongOnly,
+            showChurnOnly,
+            textFilter
+        });
+        
+        // Filter the issues
+        let filteredIssues = [...this.issues];
+        
+        // Apply text filter
+        if (textFilter.length > 0) {
+            filteredIssues = filteredIssues.filter(issue => {
+                return issue.key.toLowerCase().includes(textFilter) || 
+                       issue.fields.summary.toLowerCase().includes(textFilter);
+            });
+        }
+        
+        // Filter out "Filtered issues" if needed
+        if (!showFiltered) {
+            filteredIssues = filteredIssues.filter(issue => {
+                return !this.filteredCategoryIssues.includes(issue.key);
+            });
+        }
+        
+        // Filter out resolved issues if needed
+        if (!showResolved) {
+            filteredIssues = filteredIssues.filter(issue => {
+                return !issue.fields.status.name.includes('Done') && 
+                       !issue.fields.status.name.includes('Closed') && 
+                       !issue.fields.status.name.includes('Resolved');
+            });
+        }
+        
+        // Filter only at-risk issues if needed
+        if (showAtRiskOnly) {
+            filteredIssues = filteredIssues.filter(issue => {
+                const issueData = this.issueData[issue.key] || {};
+                return issueData.isAging || false;
+            });
+        }
+        
+        // Filter only ping-pong issues if needed
+        if (showPingPongOnly) {
+            filteredIssues = filteredIssues.filter(issue => {
+                const issueData = this.issueData[issue.key] || {};
+                return issueData.isPingPong || false;
+            });
+            
+            // Log how many ping-pong issues were found
+            console.log(`Found ${filteredIssues.length} ping-pong issues after filtering`);
+        }
+        
+        // Filter only churn issues if needed
+        if (showChurnOnly) {
+            filteredIssues = filteredIssues.filter(issue => {
+                const issueData = this.issueData[issue.key] || {};
+                // Debug log for churn issues
+                console.log(`Checking issue ${issue.key} for churn: isChurn=${issueData.isChurn || false}`);
+                return issueData.isChurn || false;
+            });
+            
+            // Log how many churn issues were found
+            console.log(`Found ${filteredIssues.length} churn issues after filtering`);
+        }
+        
+        // Update the UI
+        this.updateTicketTable(filteredIssues);
+        this.updateFilterStats(filteredIssues);
+    }
+
+    getStageColor(stage, opacity = 1) {
+        const stageColors = {
+            'To Do': `rgba(108, 132, 233, ${opacity})`,
+            'In Progress': `rgba(54, 179, 126, ${opacity})`,
+            'Code Review': `rgba(255, 153, 31, ${opacity})`,
+            'QA': `rgba(101, 84, 192, ${opacity})`,
+            'Done': `rgba(87, 217, 163, ${opacity})`
+        };
+        
+        return stageColors[stage] || `rgba(120, 120, 120, ${opacity})`;
+    }
+
+    renderCycleTimeMetrics(container) {
+        console.log('renderCycleTimeMetrics called');
+        
+        try {
+            if (!this.resolutionMetrics || !this.resolutionMetrics.cycle_time_metrics || Object.keys(this.resolutionMetrics.cycle_time_metrics).length === 0) {
+                console.warn('No cycle time metrics found');
+                container.innerHTML = '<p class="no-data">No cycle time metrics available.</p>';
+                return;
+            }
+            
+            const cycleTimeMetrics = this.resolutionMetrics.cycle_time_metrics;
+            
+            // Create main container with title
+            const metricsContainer = document.createElement('div');
+            metricsContainer.style.backgroundColor = '#fff';
+            metricsContainer.style.padding = '25px';
+            metricsContainer.style.borderRadius = '8px';
+            metricsContainer.style.boxShadow = '0 2px 10px rgba(0,0,0,0.05)';
+            metricsContainer.style.marginBottom = '30px';
+            
+            const title = document.createElement('h3');
+            title.textContent = 'Cycle Time Metrics';
+            title.style.fontSize = '20px';
+            title.style.fontWeight = 'bold';
+            title.style.marginTop = '0';
+            title.style.marginBottom = '20px';
+            title.style.color = '#172B4D';
+            metricsContainer.appendChild(title);
+            
+            // Add description
+            const description = document.createElement('p');
+            description.textContent = 'Average time spent between key workflow transitions.';
+            description.style.fontSize = '14px';
+            description.style.color = '#666';
+            description.style.marginBottom = '25px';
+            metricsContainer.appendChild(description);
+            
+            // Create grid for metrics
+            const gridContainer = document.createElement('div');
+            gridContainer.style.display = 'grid';
+            gridContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(400px, 1fr))';
+            gridContainer.style.gap = '25px';
+            
+            // Get all the cycle times and sort by value to show most important first
+            const cycleTimeEntries = Object.entries(cycleTimeMetrics);
+            cycleTimeEntries.sort((a, b) => b[1].avg_hours - a[1].avg_hours);
+            
+            cycleTimeEntries.forEach(([key, data]) => {
+                const transitionNames = key.split(' → ');
+                const fromState = transitionNames[0];
+                const toState = transitionNames[1];
+                
+                // Create card for this transition
+                const card = document.createElement('div');
+                card.style.backgroundColor = '#f7f8f9';
+                card.style.padding = '20px';
+                card.style.borderRadius = '8px';
+                card.style.border = '1px solid #e0e0e0';
+                
+                // Create header with icons
+                const header = document.createElement('div');
+                header.style.display = 'flex';
+                header.style.alignItems = 'center';
+                header.style.marginBottom = '15px';
+                
+                // From state with icon
+                const fromStateDiv = document.createElement('div');
+                fromStateDiv.textContent = fromState;
+                fromStateDiv.style.fontWeight = 'bold';
+                fromStateDiv.style.fontSize = '16px';
+                fromStateDiv.style.padding = '8px 12px';
+                fromStateDiv.style.backgroundColor = this.getStatusColor(fromState, 0.15);
+                fromStateDiv.style.color = this.getStatusColor(fromState);
+                fromStateDiv.style.borderRadius = '5px';
+                header.appendChild(fromStateDiv);
+                
+                // Arrow icon
+                const arrow = document.createElement('div');
+                arrow.innerHTML = '&#8594;'; // Right arrow
+                arrow.style.margin = '0 15px';
+                arrow.style.fontSize = '20px';
+                arrow.style.color = '#6B778C';
+                header.appendChild(arrow);
+                
+                // To state with icon
+                const toStateDiv = document.createElement('div');
+                toStateDiv.textContent = toState;
+                toStateDiv.style.fontWeight = 'bold';
+                toStateDiv.style.fontSize = '16px';
+                toStateDiv.style.padding = '8px 12px';
+                toStateDiv.style.backgroundColor = this.getStatusColor(toState, 0.15);
+                toStateDiv.style.color = this.getStatusColor(toState);
+                toStateDiv.style.borderRadius = '5px';
+                header.appendChild(toStateDiv);
+                
+                card.appendChild(header);
+                
+                // Add metrics
+                const metrics = document.createElement('div');
+                metrics.style.marginTop = '20px';
+                
+                // Average time
+                const avgTimeRow = document.createElement('div');
+                avgTimeRow.style.display = 'flex';
+                avgTimeRow.style.justifyContent = 'space-between';
+                avgTimeRow.style.marginBottom = '15px';
+                
+                const avgLabel = document.createElement('div');
+                avgLabel.textContent = 'Average Duration:';
+                avgLabel.style.fontSize = '15px';
+                avgLabel.style.color = '#172B4D';
+                avgTimeRow.appendChild(avgLabel);
+                
+                const avgValue = document.createElement('div');
+                avgValue.textContent = this.formatDuration(data.avg_hours);
+                avgValue.style.fontWeight = 'bold';
+                avgValue.style.fontSize = '18px';
+                avgValue.style.color = '#172B4D';
+                avgTimeRow.appendChild(avgValue);
+                
+                metrics.appendChild(avgTimeRow);
+                
+                // Median time if available
+                if (data.median_hours !== undefined) {
+                    const medianTimeRow = document.createElement('div');
+                    medianTimeRow.style.display = 'flex';
+                    medianTimeRow.style.justifyContent = 'space-between';
+                    medianTimeRow.style.marginBottom = '15px';
+                    
+                    const medianLabel = document.createElement('div');
+                    medianLabel.textContent = 'Median Duration:';
+                    medianLabel.style.fontSize = '15px';
+                    medianLabel.style.color = '#172B4D';
+                    medianTimeRow.appendChild(medianLabel);
+                    
+                    const medianValue = document.createElement('div');
+                    medianValue.textContent = this.formatDuration(data.median_hours);
+                    medianValue.style.fontWeight = 'bold';
+                    medianValue.style.fontSize = '16px';
+                    medianValue.style.color = '#172B4D';
+                    medianTimeRow.appendChild(medianValue);
+                    
+                    metrics.appendChild(medianTimeRow);
+                }
+                
+                // Sample count
+                const countRow = document.createElement('div');
+                countRow.style.display = 'flex';
+                countRow.style.justifyContent = 'space-between';
+                countRow.style.marginBottom = '10px';
+                
+                const countLabel = document.createElement('div');
+                countLabel.textContent = 'Tickets Analyzed:';
+                countLabel.style.fontSize = '15px';
+                countLabel.style.color = '#172B4D';
+                countRow.appendChild(countLabel);
+                
+                const countValue = document.createElement('div');
+                countValue.textContent = data.count;
+                countValue.style.fontWeight = 'bold';
+                countValue.style.fontSize = '16px';
+                countValue.style.color = '#172B4D';
+                countRow.appendChild(countValue);
+                
+                metrics.appendChild(countRow);
+                
+                // Add mini chart/visual if desired
+                if (data.percentiles) {
+                    const chartContainer = document.createElement('div');
+                    chartContainer.style.marginTop = '20px';
+                    
+                    const chartTitle = document.createElement('div');
+                    chartTitle.textContent = 'Percentiles';
+                    chartTitle.style.fontSize = '15px';
+                    chartTitle.style.fontWeight = 'bold';
+                    chartTitle.style.marginBottom = '10px';
+                    chartContainer.appendChild(chartTitle);
+                    
+                    // Create percentile bars
+                    const percentiles = [25, 50, 75, 90];
+                    const maxPercentileValue = Math.max(...percentiles.map(p => data.percentiles[`p${p}`] || 0));
+                    
+                    percentiles.forEach(percentile => {
+                        if (!data.percentiles[`p${percentile}`]) return;
+                        
+                        const value = data.percentiles[`p${percentile}`];
+                        const percentage = (value / maxPercentileValue) * 100;
+                        
+                        const pRow = document.createElement('div');
+                        pRow.style.display = 'flex';
+                        pRow.style.alignItems = 'center';
+                        pRow.style.marginBottom = '10px';
+                        
+                        const pLabel = document.createElement('div');
+                        pLabel.style.width = '50px';
+                        pLabel.style.fontSize = '14px';
+                        pLabel.style.color = '#505F79';
+                        pLabel.textContent = `P${percentile}:`;
+                        pRow.appendChild(pLabel);
+                        
+                        const pBarContainer = document.createElement('div');
+                        pBarContainer.style.flex = '1';
+                        pBarContainer.style.height = '14px';
+                        pBarContainer.style.backgroundColor = '#f0f0f0';
+                        pBarContainer.style.borderRadius = '7px';
+                        pBarContainer.style.overflow = 'hidden';
+                        pBarContainer.style.margin = '0 10px';
+                        
+                        const pBar = document.createElement('div');
+                        pBar.style.height = '100%';
+                        pBar.style.width = `${percentage}%`;
+                        pBar.style.backgroundColor = this.getPercentileColor(percentile);
+                        pBarContainer.appendChild(pBar);
+                        
+                        pRow.appendChild(pBarContainer);
+                        
+                        const pValue = document.createElement('div');
+                        pValue.style.width = '100px';
+                        pValue.style.fontSize = '14px';
+                        pValue.style.fontWeight = 'bold';
+                        pValue.style.textAlign = 'right';
+                        pValue.textContent = this.formatDuration(value);
+                        pRow.appendChild(pValue);
+                        
+                        chartContainer.appendChild(pRow);
+                    });
+                    
+                    metrics.appendChild(chartContainer);
+                }
+                
+                card.appendChild(metrics);
+                gridContainer.appendChild(card);
+            });
+            
+            metricsContainer.appendChild(gridContainer);
+            container.appendChild(metricsContainer);
+            
+        } catch (error) {
+            console.error('Error rendering cycle time metrics:', error);
+            container.innerHTML = `<p class="no-data">Error rendering cycle time metrics: ${error.message}</p>`;
+        }
+    }
+    
+    getPercentileColor(percentile) {
+        switch(percentile) {
+            case 25: return '#36B37E'; // Green
+            case 50: return '#00B8D9'; // Blue
+            case 75: return '#FFAB00'; // Orange
+            case 90: return '#FF5630'; // Red
+            default: return '#6554C0'; // Purple
+        }
+    }
+
+    async findStoryPointFieldId() {
+        console.log('Attempting to find Story Point field ID...');
+        try {
+            const response = await fetch(`${this.proxyUrl}${this.proxyEndpoint}/field`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch fields: ${response.status} ${response.statusText}`);
+            }
+            
+            const fields = await response.json();
+            console.log(`Received ${fields.length} fields from Jira API`);
+
+            // Common names for the Story Points field
+            const commonNames = ['Story Points', 'Story Point Estimate'];
+            let foundField = null;
+
+            for (const field of fields) {
+                if (commonNames.some(name => field.name.toLowerCase() === name.toLowerCase())) {
+                    foundField = field;
+                    break;
+                }
+            }
+
+            if (foundField) {
+                this.storyPointFieldId = foundField.id;
+                console.log(`Found Story Point field: '${foundField.name}' with ID: ${this.storyPointFieldId}`);
+            } else {
+                console.warn('Could not automatically find Story Points field ID using common names.');
+                this.showError('Could not find Story Points field. Velocity calculation will be unavailable.');
+            }
+
+        } catch (error) {
+            console.error('Error fetching Jira fields:', error);
+            this.showError(`Failed to fetch field definitions: ${error.message}. Velocity calculation unavailable.`);
+            this.storyPointFieldId = null; // Ensure it's null on error
+        }
     }
 }
 
