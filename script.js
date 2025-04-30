@@ -1815,8 +1815,12 @@ class JiraMetrics {
         const chart = document.getElementById('priorityChart');
         const total = Object.values(priorityCounts).reduce((a, b) => a + b, 0);
         
+        // Sort entries alphabetically by priority name
+        const sortedEntries = Object.entries(priorityCounts).sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+        
         let chartHTML = '<div style="display: flex; flex-direction: column; height: 100%; gap: 5px;">';
-        Object.entries(priorityCounts).forEach(([priority, count]) => {
+        // Iterate over sorted entries
+        sortedEntries.forEach(([priority, count]) => {
             const percentage = (count / total) * 100;
             chartHTML += `                <div style="display: flex; align-items: center;">
                     <div style="width: 100px;">${priority}</div>
